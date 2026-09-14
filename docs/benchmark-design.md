@@ -78,10 +78,7 @@ runtime:
   startup_timeout_seconds: 300
   case_timeout_seconds: 1800
   poll_interval_seconds: 5
-suites:
-  - id: sample-suite
-    repository: https://example.com/benchmark-repository.git
-    revision: 확인 필요
+suites: [] # 테스트 저장소 URL을 전달받은 뒤 추가
 ```
 
 공식 실행에서는 branch 대신 commit SHA 또는 tag를 사용한다.

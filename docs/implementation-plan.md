@@ -33,10 +33,10 @@ Clio-Server와 Clio-Agent에 필요한 API 변경은 각 저장소에서 구현�
 
 목표: 구현을 시작하기 위해 필요한 최소 경계를 합의한다.
 
-- Python 기반 CLI의 패키징·배포 방식을 선택한다.
+- 확정한 Python CLI 패키지 골격을 구성한다.
 - Server·Agent의 health, 상태 조회, 기록 수집 가능 여부를 조사한다.
 - 기존 API를 우선 사용하고 부족한 API와 `BENCHMARK_MODE` 동작을 정의한다.
-- 전달받은 테스트 저장소 URL에서 첫 번째 리포트를 선정한다.
+- 테스트 저장소가 없어도 가능한 계약·통합 테스트 범위를 정한다.
 
 완료 기준: MVP 흐름에 필요한 API와 입력·출력 소유자가 정해지고 미지원 기능이 식별된다.
 
@@ -147,30 +147,32 @@ Runtime과 서비스 API 조사는 병행할 수 있지만, 단일 사례 구현
 | 인프라 실패가 오답으로 집계 | `INFRA_ERROR`를 별도 상태로 관리 |
 | 버전 변화로 비교 불가 | commit SHA, 이미지 digest, 모델·평가 설정 기록 |
 
-## 9. 확정 사항과 남은 결정
+## 9. 구현 결정
 
-확정 사항:
+패키징과 설정:
 
-- 구현 언어는 Python이다.
-- 테스트 저장소는 추후 URL 목록으로 전달받는다.
-- Server·Agent의 기존 API를 우선 사용하고 필요한 API가 없으면 해당 서비스에 추가한다.
-- 로컬 실행에 필요한 키는 사용자 설정 파일로 주입한다. 실제 값은 커밋하지 않고 예제 설정에는 placeholder만 둔다.
+- Python 3.11+, `src` layout, hatchling build backend와 `clio-benchmark` console script를 사용한다.
+- 개발·잠금·실행 도구는 `uv`를 사용하고 일반 `pip install`도 가능한 표준 `pyproject.toml`을 유지한다.
+- 테스트 저장소 설정은 `suites: []`로 두고 URL을 전달받은 뒤 추가한다.
+- 키는 gitignore 대상인 로컬 설정 파일로 받아 컨테이너 환경변수에 전달한다. manifest에는 값 대신 키 이름만 기록한다.
 
-`BENCHMARK_MODE`는 일반 실행에 불필요한 다음 기능을 안전하게 제공하기 위한 실행 모드다.
+기존 Clio에서 재사용할 기능:
 
-- 관측: 리포트 요청부터 Agent 작업까지 같은 correlation ID로 연결하고 최종 결과, trace, 토큰과 도구 호출 기록을 조회한다.
-- 격리: 이전 실행의 프로젝트, DB 데이터, 캐시 또는 Agent 메모리가 다음 실행에 영향을 주지 않게 한다.
-- 안전: 외부 알림 같은 부수 효과를 막되 실제 분석 경로와 결과는 바꾸지 않는다.
+- Server의 프로젝트 생성·삭제, 저장소 등록·목록, 버그 생성·목록과 최신 분석 결과 API를 사용한다.
+- 저장소 목록의 `syncStatus`로 `SYNCED` 또는 `FAILED`까지 기다린다.
+- Agent workflow의 `PENDING/RUNNING/COMPLETED/FAILED` 상태와 `resultSnapshot`을 완료 판정에 사용한다.
+- Server는 `/actuator/health`, Agent는 LangGraph health endpoint로 준비 상태를 확인한다.
 
-예를 들어 기존 API로 작업 상태와 기록을 모두 조회할 수 없다면 `GET /internal/benchmark/runs/{correlationId}` 형태의 내부 조회 API를 추가할 수 있다. 사례 초기화는 `POST /internal/benchmark/reset` 같은 API도 가능하지만 데이터 삭제 위험과 구현 복잡도가 있다.
+추가할 기능:
 
-MVP에서는 실행마다 별도의 Docker project와 데이터 volume을 사용하고 종료 시 폐기하는 격리 방식을 권장한다. 이 방식이면 초기화 API 없이도 깨끗한 상태를 보장할 수 있다. 실행 환경 재사용이 필요해질 때만 `BENCHMARK_MODE=true`에서 허용되는 초기화 API를 검토한다.
+- Server에 `request_id`로 workflow run을 조회하는 read-only API를 추가한다. 버그 ID로 만든 `process-bug-{bugId}` 요청의 완료 상태와 결과를 찾는 용도다.
+- Agent에 모델 호출 수, 입력·출력 토큰, 도구 호출과 소요 시간을 집계해 workflow 결과에 포함하는 계측을 추가한다.
+- Agent 저장소에는 Dockerfile이 없으므로 추가하고, Benchmark가 두 서비스와 의존 컨테이너를 묶는 Compose 구성을 소유한다.
 
-남은 결정:
+`BENCHMARK_MODE`는 위 계측 활성화와 외부 알림 차단에만 사용한다. 데이터 초기화 전용 API는 만들지 않는다. 하나의 benchmark run이 하나의 Docker Compose project와 새 데이터 volume을 사용하고, 같은 run 안의 suite는 서로 다른 Clio 프로젝트로 격리한다.
 
-- Python 패키징 및 배포 방식
-- MVP 테스트 저장소 URL과 첫 리포트
-- 기존 API 조사 후 추가할 API의 경로와 응답 계약
-- 한 Docker 환경의 격리 단위를 전체 run과 suite 중 무엇으로 할지
+## 10. 보류 사항
 
-결정되지 않은 사항은 단계 0 산출물에 `확인 필요` 상태와 담당자를 기록한다.
+- MVP 테스트 저장소와 첫 리포트는 URL을 전달받을 때까지 비워 둔다.
+- 실제 테스트 저장소가 필요한 end-to-end 검증은 URL을 받은 뒤 수행한다.
+- 추가 API의 정확한 경로와 응답 필드는 구현 시 Server convention에 맞춰 확정한다.
