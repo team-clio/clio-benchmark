@@ -1,0 +1,37 @@
+schema_version: 1
+
+clio:
+  agent:
+    repository: https://github.com/team-clio/clio-agent-graph.git
+    revision: main
+  server:
+    repository: https://github.com/team-clio/clio-server.git
+    revision: main
+
+runtime:
+  startup_timeout_seconds: 300
+  case_timeout_seconds: 1800
+  poll_interval_seconds: 5
+
+evaluation:
+  pass_threshold: 70
+  weights:
+    verdict: 20
+    root_cause: 35
+    code_location: 15
+    evidence_quality: 15
+    reproduction: 10
+    uncertainty: 5
+
+environment:
+  agent: {}
+  server: {}
+
+# 실제 키는 git에 포함되지 않는 benchmark.local.yaml에 입력한다.
+secrets:
+  agent: {}
+  server: {}
+
+# 테스트 저장소 URL을 전달받은 뒤 추가한다.
+suites: []
+
