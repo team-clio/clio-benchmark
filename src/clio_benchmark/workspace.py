@@ -57,3 +57,17 @@ class Workspace:
             return None
         manifests = sorted(self.runs.glob("*/manifest.json"), reverse=True)
         return self.load_manifest(manifests[0].parent.name) if manifests else None
+
+    def write_run_artifact(self, run_id: str, relative_path: Path, payload: object) -> Path:
+        run_dir = (self.runs / run_id).resolve()
+        destination = (run_dir / relative_path).resolve()
+        if not destination.is_relative_to(run_dir):
+            raise WorkspaceError(f"Artifact path escapes run directory: {relative_path}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name(f".{destination.name}.tmp")
+        temporary.write_text(
+            f"{json.dumps(payload, indent=2, ensure_ascii=False, default=str)}\n",
+            encoding="utf-8",
+        )
+        temporary.replace(destination)
+        return destination

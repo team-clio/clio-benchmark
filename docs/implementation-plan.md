@@ -153,7 +153,7 @@ Runtime과 서비스 API 조사는 병행할 수 있지만, 단일 사례 구현
 
 - Python 3.11+, `src` layout, hatchling build backend와 `clio-benchmark` console script를 사용한다.
 - 개발·잠금·실행 도구는 `uv`를 사용하고 일반 `pip install`도 가능한 표준 `pyproject.toml`을 유지한다.
-- 테스트 저장소 설정은 `suites: []`로 두고 URL을 전달받은 뒤 추가한다.
+- 첫 suite는 `team-clio/clio-benchmark-fixture-feature-flags`이며 이후 같은 계약으로 추가한다.
 - 키는 gitignore 대상인 로컬 설정 파일로 받아 컨테이너 환경변수에 전달한다. manifest에는 값 대신 키 이름만 기록한다.
 
 기존 Clio에서 재사용할 기능:
@@ -173,6 +173,6 @@ Runtime과 서비스 API 조사는 병행할 수 있지만, 단일 사례 구현
 
 ## 10. 보류 사항
 
-- MVP 테스트 저장소와 첫 리포트는 URL을 전달받을 때까지 비워 둔다.
-- 실제 테스트 저장소가 필요한 end-to-end 검증은 URL을 받은 뒤 수행한다.
-- 추가 API의 정확한 경로와 응답 필드는 구현 시 Server convention에 맞춰 확정한다.
+- 첫 suite의 Server·Agent 실제 처리와 원인 탐지는 검증했다. oracle 자동 채점은 미정이다.
+- Agent·Server Docker 실행과 격리 DB 준비를 Benchmark `setup`/`down`에 통합해야 한다.
+- workflow 실패를 timeout 전에 감지할 `request_id` 조회 API의 경로와 응답을 확정해야 한다.

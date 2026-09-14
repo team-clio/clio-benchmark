@@ -8,9 +8,11 @@ from typing import Annotated
 
 import typer
 
+from clio_benchmark.clio_client import ClioClient
 from clio_benchmark.config import BenchmarkConfig, load_config
 from clio_benchmark.errors import BenchmarkError
 from clio_benchmark.manifest import RunStatus
+from clio_benchmark.runner import BenchmarkRunner
 from clio_benchmark.workspace import Workspace
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
@@ -36,7 +38,7 @@ def run(
     config: Annotated[Path, typer.Option(exists=False)] = Path("benchmark.local.yaml"),
     workspace: Annotated[Path, typer.Option()] = Path(".benchmark"),
 ) -> None:
-    """Create a run record; empty suite configurations complete without work."""
+    """Execute configured benchmark suites through Clio Server."""
     benchmark_config = _load_or_exit(config)
     local_workspace = Workspace(workspace)
     manifest = local_workspace.create_run(benchmark_config)
@@ -46,13 +48,28 @@ def run(
         typer.echo(f"Run {manifest.run_id} completed: no suites configured")
         return
 
-    manifest.transition(
-        RunStatus.FAILED,
-        error="Suite execution is not available until the Clio API adapter is configured",
-    )
+    manifest.transition(RunStatus.RUNNING)
     local_workspace.save_manifest(manifest)
-    typer.echo(f"Run {manifest.run_id} failed: {manifest.error}", err=True)
-    raise typer.Exit(code=2)
+    client = ClioClient(str(benchmark_config.runtime.server_url))
+    try:
+        manifest.case_count = BenchmarkRunner(benchmark_config, local_workspace, client).execute(
+            manifest
+        )
+    except KeyboardInterrupt as exc:
+        manifest.transition(RunStatus.CANCELLED, error="Interrupted by user")
+        local_workspace.save_manifest(manifest)
+        typer.echo(f"Run {manifest.run_id} cancelled", err=True)
+        raise typer.Exit(code=130) from exc
+    except BenchmarkError as exc:
+        manifest.transition(RunStatus.FAILED, error=str(exc))
+        local_workspace.save_manifest(manifest)
+        typer.echo(f"Run {manifest.run_id} failed: {manifest.error}", err=True)
+        raise typer.Exit(code=2) from exc
+    finally:
+        client.close()
+    manifest.transition(RunStatus.COMPLETED)
+    local_workspace.save_manifest(manifest)
+    typer.echo(f"Run {manifest.run_id} completed: {manifest.case_count} case(s)")
 
 
 @app.command()

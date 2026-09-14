@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, SecretStr, ValidationError
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, ValidationError
 
 from clio_benchmark.errors import ConfigurationError
 
@@ -26,6 +26,7 @@ class ClioConfig(StrictModel):
 
 
 class RuntimeConfig(StrictModel):
+    server_url: AnyHttpUrl = "http://localhost:8080"
     startup_timeout_seconds: int = Field(default=300, gt=0)
     case_timeout_seconds: int = Field(default=1800, gt=0)
     poll_interval_seconds: float = Field(default=5, gt=0)
@@ -59,7 +60,7 @@ class ServiceSecrets(StrictModel):
 
 
 class SuiteConfig(StrictModel):
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     repository: HttpUrl
     revision: str = Field(default="main", min_length=1)
 

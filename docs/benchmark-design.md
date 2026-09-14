@@ -75,10 +75,14 @@ clio:
     repository: https://github.com/team-clio/clio-server.git
     revision: main
 runtime:
+  server_url: http://localhost:8080
   startup_timeout_seconds: 300
   case_timeout_seconds: 1800
   poll_interval_seconds: 5
-suites: [] # 테스트 저장소 URL을 전달받은 뒤 추가
+suites:
+  - name: feature-flags
+    repository: https://github.com/team-clio/clio-benchmark-fixture-feature-flags.git
+    revision: main
 ```
 
 공식 실행에서는 branch 대신 commit SHA 또는 tag를 사용한다.
@@ -89,18 +93,17 @@ suites: [] # 테스트 저장소 URL을 전달받은 뒤 추가
 
 ```json
 {
-  "schemaVersion": 1,
-  "suite": {"id": "sample-suite", "name": "Sample benchmark"},
-  "reports": [{
-    "id": "BUG-001", "title": "로그인 후 세션이 간헐적으로 사라진다",
-    "description": "재현 상황과 관찰된 증상",
-    "stepsToReproduce": ["첫 번째 단계", "두 번째 단계"],
-    "expectedBehavior": "기대 동작", "observedBehavior": "실제 동작"
+  "schema_version": 1,
+  "cases": [{
+    "id": "BUG-001",
+    "report": {"title": "세션이 사라진다", "description": "관찰된 증상",
+      "steps_to_reproduce": ["첫 단계"], "expected_behavior": "기대 동작",
+      "actual_behavior": "실제 동작", "reproduction_command": "pytest"}
   }]
 }
 ```
 
-필수 필드는 `schemaVersion`, `suite.id`, `reports[].id`, `title`, `description`으로 제안한다. Clio-Server Bug API에 맞춘 최종 필드는 확인 필요다.
+현재 계약은 `schema_version=1`, 고유한 `cases[].id`와 `report`의 제목·설명·재현 절차·기대 및 실제 동작을 요구한다.
 
 채점용 oracle은 별도 저장소 또는 실행자 전용 경로에 둔다. 평가 대상 컨테이너에는 해당 경로를 mount하거나 API로 전달하지 않는다.
 

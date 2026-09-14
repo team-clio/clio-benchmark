@@ -9,6 +9,7 @@ clio:
     revision: main
 
 runtime:
+  server_url: http://localhost:8080
   startup_timeout_seconds: 300
   case_timeout_seconds: 1800
   poll_interval_seconds: 5
@@ -32,6 +33,7 @@ secrets:
   agent: {}
   server: {}
 
-# 테스트 저장소 URL을 전달받은 뒤 추가한다.
-suites: []
-
+suites:
+  - name: feature-flags
+    repository: https://github.com/team-clio/clio-benchmark-fixture-feature-flags.git
+    revision: main

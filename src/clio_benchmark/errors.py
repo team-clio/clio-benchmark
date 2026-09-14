@@ -11,3 +11,11 @@ class ConfigurationError(BenchmarkError):
 
 class WorkspaceError(BenchmarkError):
     """Raised when workspace state is missing or inconsistent."""
+
+
+class SuiteError(BenchmarkError):
+    """Raised when a benchmark suite cannot be prepared or parsed."""
+
+
+class ClioApiError(BenchmarkError):
+    """Raised when Clio Server cannot complete a benchmark operation."""
