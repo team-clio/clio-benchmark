@@ -24,6 +24,10 @@ evaluation:
     reproduction: 10
     uncertainty: 5
 
+experiment:
+  profile: full-clio
+  repetition: 1
+
 environment:
   agent: {}
   server: {}
@@ -37,3 +41,4 @@ suites:
   - name: feature-flags
     repository: https://github.com/team-clio/clio-benchmark-fixture-feature-flags.git
     revision: main
+    oracle: oracles/feature-flags.json

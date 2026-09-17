@@ -9,6 +9,8 @@ def test_example_config_registers_first_fixture() -> None:
     config = load_config(Path("benchmark.example.yaml"))
 
     assert [suite.name for suite in config.suites] == ["feature-flags"]
+    assert config.suites[0].oracle == Path("oracles/feature-flags.json").resolve()
+    assert config.experiment.profile == "full-clio"
     assert sum(config.evaluation.weights.as_dict().values()) == 100
 
 

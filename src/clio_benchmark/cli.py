@@ -12,6 +12,12 @@ from clio_benchmark.clio_client import ClioClient
 from clio_benchmark.config import BenchmarkConfig, load_config
 from clio_benchmark.errors import BenchmarkError
 from clio_benchmark.manifest import RunStatus
+from clio_benchmark.run_evaluation import (
+    evaluate_run,
+    load_summary,
+    render_comparison,
+    render_report,
+)
 from clio_benchmark.runner import BenchmarkRunner
 from clio_benchmark.workspace import Workspace
 
@@ -70,6 +76,44 @@ def run(
     manifest.transition(RunStatus.COMPLETED)
     local_workspace.save_manifest(manifest)
     typer.echo(f"Run {manifest.run_id} completed: {manifest.case_count} case(s)")
+    if any(suite.oracle for suite in benchmark_config.suites):
+        try:
+            summary = evaluate_run(benchmark_config, local_workspace, manifest)
+        except BenchmarkError as exc:
+            typer.echo(f"Evaluation failed: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        typer.echo(render_report(summary))
+
+
+@app.command("evaluate")
+def evaluate_command(
+    run_id: Annotated[str, typer.Argument()],
+    config: Annotated[Path, typer.Option(exists=False)] = Path("benchmark.local.yaml"),
+    workspace: Annotated[Path, typer.Option()] = Path(".benchmark"),
+) -> None:
+    """Evaluate a persisted run without executing Clio again."""
+    benchmark_config = _load_or_exit(config)
+    local_workspace = Workspace(workspace)
+    try:
+        manifest = local_workspace.load_manifest(run_id)
+        summary = evaluate_run(benchmark_config, local_workspace, manifest)
+    except BenchmarkError as exc:
+        _exit_with_error(exc)
+    typer.echo(render_report(summary))
+
+
+@app.command("compare")
+def compare_command(
+    run_ids: Annotated[list[str], typer.Argument()],
+    workspace: Annotated[Path, typer.Option()] = Path(".benchmark"),
+) -> None:
+    """Compare evaluated runs by profile, quality and duration."""
+    local_workspace = Workspace(workspace)
+    try:
+        summaries = [load_summary(local_workspace, run_id) for run_id in run_ids]
+    except BenchmarkError as exc:
+        _exit_with_error(exc)
+    typer.echo(render_comparison(summaries))
 
 
 @app.command()

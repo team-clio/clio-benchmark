@@ -63,6 +63,12 @@ class SuiteConfig(StrictModel):
     name: str = Field(min_length=1, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     repository: HttpUrl
     revision: str = Field(default="main", min_length=1)
+    oracle: Path | None = None
+
+
+class ExperimentConfig(StrictModel):
+    profile: str = Field(default="full-clio", min_length=1)
+    repetition: int = Field(default=1, ge=1)
 
 
 class BenchmarkConfig(StrictModel):
@@ -70,6 +76,7 @@ class BenchmarkConfig(StrictModel):
     clio: ClioConfig
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+    experiment: ExperimentConfig = Field(default_factory=ExperimentConfig)
     environment: ServiceValues = Field(default_factory=ServiceValues)
     secrets: ServiceSecrets = Field(default_factory=ServiceSecrets)
     suites: list[SuiteConfig] = Field(default_factory=list)
@@ -84,6 +91,7 @@ class BenchmarkConfig(StrictModel):
             },
             "runtime": self.runtime.model_dump(mode="json"),
             "evaluation": self.evaluation.model_dump(mode="json"),
+            "experiment": self.experiment.model_dump(mode="json"),
             "environment": self.environment.model_dump(mode="json"),
             "secret_names": {
                 "agent": sorted(self.secrets.agent),
@@ -94,6 +102,7 @@ class BenchmarkConfig(StrictModel):
                     "name": suite.name,
                     "repository": str(suite.repository),
                     "revision": suite.revision,
+                    "oracle": str(suite.oracle) if suite.oracle else None,
                 }
                 for suite in self.suites
             ],
@@ -114,7 +123,12 @@ def load_config(path: Path) -> BenchmarkConfig:
         raise ConfigurationError("Configuration root must be a mapping")
 
     try:
-        return BenchmarkConfig.model_validate(raw)
+        config = BenchmarkConfig.model_validate(raw)
+        base = path.resolve().parent
+        for suite in config.suites:
+            if suite.oracle is not None and not suite.oracle.is_absolute():
+                suite.oracle = (base / suite.oracle).resolve()
+        return config
     except ValidationError as exc:
         raise ConfigurationError(str(exc)) from exc
 

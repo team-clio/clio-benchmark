@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from clio_benchmark.clio_client import ClioClient
@@ -48,6 +49,7 @@ class BenchmarkRunner:
             self._write_suite_metadata(manifest, prepared, project, synced_repository)
 
             for case in prepared.benchmark.cases:
+                started_at = perf_counter()
                 bug = self._client.create_bug(project_id, case)
                 completed_bug = self._client.wait_for_bug(
                     project_id,
@@ -64,8 +66,14 @@ class BenchmarkRunner:
                         timeout_seconds=self._config.runtime.case_timeout_seconds,
                         poll_interval_seconds=self._config.runtime.poll_interval_seconds,
                     )
+                duration_seconds = round(perf_counter() - started_at, 3)
                 self._write_case_result(
-                    manifest, prepared, case.model_dump(mode="json"), completed_bug, analysis
+                    manifest,
+                    prepared,
+                    case.model_dump(mode="json"),
+                    completed_bug,
+                    analysis,
+                    duration_seconds,
                 )
                 completed_cases += 1
         return completed_cases
@@ -96,9 +104,15 @@ class BenchmarkRunner:
         case: dict[str, Any],
         bug: dict[str, Any],
         analysis: dict[str, Any] | None,
+        duration_seconds: float,
     ) -> None:
         self._workspace.write_run_artifact(
             manifest.run_id,
             Path("cases") / suite.config.name / str(case["id"]) / "result.json",
-            {"input": case, "bug": bug, "analysis": analysis},
+            {
+                "input": case,
+                "bug": bug,
+                "analysis": analysis,
+                "efficiency": {"duration_seconds": duration_seconds},
+            },
         )
