@@ -8,6 +8,7 @@ from typing import Any
 
 from clio_benchmark.clio_client import ClioClient
 from clio_benchmark.config import BenchmarkConfig
+from clio_benchmark.errors import ClioApiError
 from clio_benchmark.manifest import RunManifest
 from clio_benchmark.suite import PreparedSuite, SuiteRepository
 from clio_benchmark.workspace import Workspace
@@ -69,7 +70,13 @@ class BenchmarkRunner:
                     )
                     workflow_run_id = analysis.get("workflowRunId")
                     if workflow_run_id is not None:
-                        workflow = self._client.get_workflow(project_id, int(workflow_run_id))
+                        try:
+                            workflow = self._client.get_workflow(project_id, int(workflow_run_id))
+                        except ClioApiError as exc:
+                            workflow = {
+                                "verification_status": "unavailable",
+                                "verification_error": str(exc),
+                            }
                 duration_seconds = round(perf_counter() - started_at, 3)
                 self._write_case_result(
                     manifest,
