@@ -126,6 +126,14 @@ class ClioClient:
             time.sleep(poll_interval_seconds)
         raise ClioApiError(f"Analysis result timed out for issue: {issue_id}")
 
+    def get_workflow(self, project_id: int, workflow_run_id: int) -> dict[str, Any]:
+        """Read the completed workflow snapshot to verify benchmark execution metadata."""
+
+        return self._request(
+            "GET",
+            f"/internal-api/v1/projects/{project_id}/workflow-runs/{workflow_run_id}",
+        )
+
     def _request(
         self, method: str, path: str, payload: dict[str, Any] | None = None
     ) -> dict[str, Any]:

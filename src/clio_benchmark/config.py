@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, ValidationError
@@ -67,7 +67,7 @@ class SuiteConfig(StrictModel):
 
 
 class ExperimentConfig(StrictModel):
-    profile: str = Field(default="full-clio", min_length=1)
+    profile: Literal["one-shot", "repository-agent", "full-clio"] = "full-clio"
     repetition: int = Field(default=1, ge=1)
 
 
@@ -81,6 +81,14 @@ class BenchmarkConfig(StrictModel):
     secrets: ServiceSecrets = Field(default_factory=ServiceSecrets)
     suites: list[SuiteConfig] = Field(default_factory=list)
 
+    def resolved_agent_environment(self) -> dict[str, str]:
+        """Return non-secret Agent settings required for the selected profile."""
+
+        environment = dict(self.environment.agent)
+        environment["CLIO_ANALYSIS_PROFILE"] = self.experiment.profile
+        environment["CLIO_BENCHMARK_MODE"] = "true"
+        return environment
+
     def redacted_snapshot(self) -> dict[str, Any]:
         """Return reproducibility metadata without secret values."""
         return {
@@ -92,7 +100,10 @@ class BenchmarkConfig(StrictModel):
             "runtime": self.runtime.model_dump(mode="json"),
             "evaluation": self.evaluation.model_dump(mode="json"),
             "experiment": self.experiment.model_dump(mode="json"),
-            "environment": self.environment.model_dump(mode="json"),
+            "environment": {
+                "agent": self.resolved_agent_environment(),
+                "server": self.environment.server,
+            },
             "secret_names": {
                 "agent": sorted(self.secrets.agent),
                 "server": sorted(self.secrets.server),

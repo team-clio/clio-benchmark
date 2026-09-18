@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from clio_benchmark.config import load_config
+from clio_benchmark.errors import BenchmarkError
 from clio_benchmark.run_evaluation import evaluate_run, render_comparison
 from clio_benchmark.workspace import Workspace
 
@@ -55,6 +58,7 @@ def test_evaluates_persisted_run_and_writes_reports(tmp_path: Path) -> None:
                     }
                 },
                 "efficiency": {"duration_seconds": 60},
+                "workflow": {"result_snapshot": {"analysis_profile": "full-clio"}},
             }
         ),
         encoding="utf-8",
@@ -66,3 +70,22 @@ def test_evaluates_persisted_run_and_writes_reports(tmp_path: Path) -> None:
     assert (workspace.runs / manifest.run_id / "summary.json").exists()
     assert (workspace.runs / manifest.run_id / "report.md").exists()
     assert "full-clio" in render_comparison([summary])
+
+
+def test_rejects_run_from_a_different_agent_profile(tmp_path: Path) -> None:
+    config = load_config(Path("benchmark.example.yaml"))
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    result_path = (
+        workspace.runs
+        / manifest.run_id
+        / "cases/feature-flags/flag-value-changes-after-another-tenant-lookup/result.json"
+    )
+    result_path.parent.mkdir(parents=True)
+    result_path.write_text(
+        json.dumps({"workflow": {"result_snapshot": {"analysis_profile": "one-shot"}}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(BenchmarkError, match="profile mismatch"):
+        evaluate_run(config, workspace, manifest)

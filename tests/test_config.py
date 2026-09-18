@@ -11,6 +11,8 @@ def test_example_config_registers_first_fixture() -> None:
     assert [suite.name for suite in config.suites] == ["feature-flags"]
     assert config.suites[0].oracle == Path("oracles/feature-flags.json").resolve()
     assert config.experiment.profile == "full-clio"
+    assert config.resolved_agent_environment()["CLIO_ANALYSIS_PROFILE"] == "full-clio"
+    assert config.resolved_agent_environment()["CLIO_BENCHMARK_MODE"] == "true"
     assert sum(config.evaluation.weights.as_dict().values()) == 100
 
 

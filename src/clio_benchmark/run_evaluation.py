@@ -33,6 +33,7 @@ def evaluate_run(
                 / "result.json"
             )
             result = _read_json(result_path)
+            _verify_profile(result, config.experiment.profile)
             report = score_case(result, expected, config.evaluation)
             serialized = report_as_dict(report)
             serialized.update({"suite": suite.name, "case_id": expected.id})
@@ -154,3 +155,13 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise BenchmarkError(f"Benchmark artifact must be an object: {path}")
     return payload
+
+
+def _verify_profile(result: dict[str, Any], expected: str) -> None:
+    workflow = result.get("workflow") or {}
+    snapshot = workflow.get("result_snapshot") or workflow.get("resultSnapshot") or {}
+    actual = snapshot.get("analysis_profile")
+    if actual is not None and actual != expected:
+        raise BenchmarkError(
+            f"Agent profile mismatch: expected {expected}, workflow reported {actual}"
+        )

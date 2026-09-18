@@ -59,6 +59,7 @@ class BenchmarkRunner:
                 )
                 issue_id = completed_bug.get("issue_id")
                 analysis = None
+                workflow = None
                 if issue_id is not None:
                     analysis = self._client.wait_for_analysis(
                         project_id,
@@ -66,6 +67,9 @@ class BenchmarkRunner:
                         timeout_seconds=self._config.runtime.case_timeout_seconds,
                         poll_interval_seconds=self._config.runtime.poll_interval_seconds,
                     )
+                    workflow_run_id = analysis.get("workflowRunId")
+                    if workflow_run_id is not None:
+                        workflow = self._client.get_workflow(project_id, int(workflow_run_id))
                 duration_seconds = round(perf_counter() - started_at, 3)
                 self._write_case_result(
                     manifest,
@@ -73,6 +77,7 @@ class BenchmarkRunner:
                     case.model_dump(mode="json"),
                     completed_bug,
                     analysis,
+                    workflow,
                     duration_seconds,
                 )
                 completed_cases += 1
@@ -104,6 +109,7 @@ class BenchmarkRunner:
         case: dict[str, Any],
         bug: dict[str, Any],
         analysis: dict[str, Any] | None,
+        workflow: dict[str, Any] | None,
         duration_seconds: float,
     ) -> None:
         self._workspace.write_run_artifact(
@@ -113,6 +119,7 @@ class BenchmarkRunner:
                 "input": case,
                 "bug": bug,
                 "analysis": analysis,
+                "workflow": workflow,
                 "efficiency": {"duration_seconds": duration_seconds},
             },
         )

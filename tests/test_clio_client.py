@@ -24,3 +24,23 @@ def test_wait_for_analysis_retries_empty_success_response() -> None:
 
     assert result == {"analysisResultId": 1}
     client.close()
+
+
+def test_reads_workflow_result_snapshot() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/internal-api/v1/projects/1/workflow-runs/7"
+        return httpx.Response(
+            200,
+            json={"id": 7, "result_snapshot": {"analysis_profile": "full-clio"}},
+        )
+
+    client = ClioClient("http://clio.test")
+    client._client.close()
+    client._client = httpx.Client(
+        base_url="http://clio.test", transport=httpx.MockTransport(handler)
+    )
+
+    result = client.get_workflow(1, 7)
+
+    assert result["result_snapshot"]["analysis_profile"] == "full-clio"
+    client.close()
