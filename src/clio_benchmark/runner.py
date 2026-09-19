@@ -9,8 +9,14 @@ from typing import Any
 
 from clio_benchmark.clio_client import ClioClient
 from clio_benchmark.config import BenchmarkConfig
-from clio_benchmark.errors import BenchmarkError, BenchmarkTimeout, ClioAnalysisError
+from clio_benchmark.errors import (
+    BenchmarkError,
+    BenchmarkTimeout,
+    ClioAnalysisError,
+    EvaluationError,
+)
 from clio_benchmark.evaluation import DeterministicEvaluation, evaluate_deterministic
+from clio_benchmark.llm_judge import Judge, LangChainLLMJudge, LLMJudgeResult
 from clio_benchmark.manifest import RunManifest
 from clio_benchmark.reporter import render_markdown_report
 from clio_benchmark.result import (
@@ -29,6 +35,8 @@ class ExecutionSummary:
     failed_cases: int
     detected_cases: int
     location_matches: int
+    llm_evaluated_cases: int
+    llm_failed_cases: int
 
 
 class BenchmarkRunner:
@@ -38,16 +46,22 @@ class BenchmarkRunner:
         workspace: Workspace,
         client: ClioClient,
         suite_repository: SuiteRepository | None = None,
+        judge: Judge | None = None,
     ) -> None:
         self._config = config
         self._workspace = workspace
         self._client = client
         self._suite_repository = suite_repository or SuiteRepository()
+        self._judge = judge
+        if self._judge is None and config.evaluation.llm_judge.enabled:
+            self._judge = LangChainLLMJudge(config.evaluation.llm_judge)
 
     def execute(self, manifest: RunManifest) -> ExecutionSummary:
         results: list[CaseExecutionResult] = []
         detected_cases = 0
         location_matches = 0
+        llm_evaluated_cases = 0
+        llm_failed_cases = 0
 
         for suite_config in self._config.suites:
             prepared = self._suite_repository.prepare(
@@ -70,12 +84,14 @@ class BenchmarkRunner:
             self._write_suite_metadata(manifest, prepared, project, synced_repository)
 
             for case in prepared.cases.cases:
-                result, detected, location_match = self._execute_case(
+                result, detected, location_match, llm_evaluated, llm_failed = self._execute_case(
                     manifest, prepared, project_id, case
                 )
                 results.append(result)
                 detected_cases += int(detected)
                 location_matches += int(location_match)
+                llm_evaluated_cases += int(llm_evaluated)
+                llm_failed_cases += int(llm_failed)
 
         completed = sum(result.status is CaseStatus.COMPLETED for result in results)
         summary = ExecutionSummary(
@@ -84,7 +100,15 @@ class BenchmarkRunner:
             failed_cases=len(results) - completed,
             detected_cases=detected_cases,
             location_matches=location_matches,
+            llm_evaluated_cases=llm_evaluated_cases,
+            llm_failed_cases=llm_failed_cases,
         )
+        if self._judge is None:
+            quality_status = "llm_evaluation_disabled"
+        elif summary.llm_failed_cases:
+            quality_status = "llm_evaluation_failed"
+        else:
+            quality_status = "pending_score_aggregation"
         self._workspace.write_run_artifact(
             manifest.run_id,
             Path("summary.json"),
@@ -94,8 +118,10 @@ class BenchmarkRunner:
                 "failedCases": summary.failed_cases,
                 "detectedCases": summary.detected_cases,
                 "locationMatches": summary.location_matches,
+                "llmEvaluatedCases": summary.llm_evaluated_cases,
+                "llmFailedCases": summary.llm_failed_cases,
                 "qualityScore": None,
-                "qualityScoreStatus": "pending_llm_evaluation",
+                "qualityScoreStatus": quality_status,
             },
         )
         self._workspace.write_run_text(
@@ -111,7 +137,7 @@ class BenchmarkRunner:
         suite: PreparedSuite,
         project_id: int,
         case: BenchmarkCase,
-    ) -> tuple[CaseExecutionResult, bool, bool]:
+    ) -> tuple[CaseExecutionResult, bool, bool, bool, bool]:
         started = time.monotonic()
         case_path = Path("cases") / suite.config.name / case.id
         self._workspace.write_run_artifact(
@@ -140,7 +166,26 @@ class BenchmarkRunner:
 
             raw_result = {"bug": completed_bug, "analysis": analysis}
             normalized = normalize_clio_result(raw_result)
-            evaluation = evaluate_deterministic(normalized, suite.truth_for(case.id))
+            ground_truth = suite.truth_for(case.id)
+            evaluation = evaluate_deterministic(normalized, ground_truth)
+            try:
+                llm_evaluation = (
+                    self._judge.evaluate(case, ground_truth, normalized, suite.path)
+                    if self._judge is not None
+                    else None
+                )
+            except EvaluationError as exc:
+                execution = CaseExecutionResult(
+                    case_id=case.id,
+                    status=CaseStatus.EVALUATION_FAILED,
+                    duration_seconds=time.monotonic() - started,
+                    error=str(exc),
+                    normalized=normalized,
+                )
+                self._write_evaluation_failure_artifacts(
+                    manifest, case_path, raw_result, execution, evaluation, exc
+                )
+                return execution, evaluation.detected, evaluation.location_matches, False, True
             duration = time.monotonic() - started
             execution = CaseExecutionResult(
                 case_id=case.id,
@@ -149,9 +194,15 @@ class BenchmarkRunner:
                 normalized=normalized,
             )
             self._write_success_artifacts(
-                manifest, case_path, raw_result, execution, evaluation
+                manifest, case_path, raw_result, execution, evaluation, llm_evaluation
             )
-            return execution, evaluation.detected, evaluation.location_matches
+            return (
+                execution,
+                evaluation.detected,
+                evaluation.location_matches,
+                llm_evaluation is not None,
+                False,
+            )
         except BenchmarkTimeout as exc:
             execution = self._write_failure_artifacts(
                 manifest, case_path, case.id, CaseStatus.TIMEOUT, exc, started
@@ -164,7 +215,7 @@ class BenchmarkRunner:
             execution = self._write_failure_artifacts(
                 manifest, case_path, case.id, CaseStatus.INFRA_ERROR, exc, started
             )
-        return execution, False, False
+        return execution, False, False, False, False
 
     def _write_success_artifacts(
         self,
@@ -173,6 +224,7 @@ class BenchmarkRunner:
         raw_result: dict[str, Any],
         execution: CaseExecutionResult,
         evaluation: DeterministicEvaluation,
+        llm_evaluation: LLMJudgeResult | None,
     ) -> None:
         self._workspace.write_run_artifact(
             manifest.run_id, case_path / "clio-result.json", raw_result
@@ -186,7 +238,7 @@ class BenchmarkRunner:
                     "locationMatches": evaluation.location_matches,
                     "matchedLocation": evaluation.matched_location,
                 },
-                "llmJudge": {"status": "pending"},
+                "llmJudge": self._llm_artifact(llm_evaluation),
             },
         )
         self._workspace.write_run_artifact(
@@ -194,6 +246,49 @@ class BenchmarkRunner:
             case_path / "metrics.json",
             execution.model_dump(mode="json", exclude={"normalized"}),
         )
+
+    def _write_evaluation_failure_artifacts(
+        self,
+        manifest: RunManifest,
+        case_path: Path,
+        raw_result: dict[str, Any],
+        execution: CaseExecutionResult,
+        evaluation: DeterministicEvaluation,
+        error: EvaluationError,
+    ) -> None:
+        self._workspace.write_run_artifact(
+            manifest.run_id, case_path / "clio-result.json", raw_result
+        )
+        self._workspace.write_run_artifact(
+            manifest.run_id,
+            case_path / "evaluation.json",
+            {
+                "deterministic": {
+                    "detected": evaluation.detected,
+                    "locationMatches": evaluation.location_matches,
+                    "matchedLocation": evaluation.matched_location,
+                },
+                "llmJudge": {
+                    "status": "failed",
+                    "error": str(error),
+                    "metadata": self._judge.metadata if self._judge is not None else {},
+                },
+            },
+        )
+        self._workspace.write_run_artifact(
+            manifest.run_id,
+            case_path / "metrics.json",
+            execution.model_dump(mode="json", exclude={"normalized"}),
+        )
+
+    def _llm_artifact(self, result: LLMJudgeResult | None) -> dict[str, Any]:
+        if result is None:
+            return {"status": "disabled"}
+        return {
+            "status": "completed",
+            "metadata": self._judge.metadata if self._judge is not None else {},
+            "result": result.model_dump(mode="json"),
+        }
 
     def _write_failure_artifacts(
         self,

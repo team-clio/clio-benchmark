@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, ValidationError
@@ -45,9 +45,23 @@ class EvaluationWeights(StrictModel):
         return {name: float(value) for name, value in self.model_dump().items()}
 
 
+class LLMJudgeConfig(StrictModel):
+    enabled: bool = False
+    provider: Literal["openai", "deepseek"] = "openai"
+    model: str | None = Field(default=None, min_length=1)
+    api_key_env: str | None = Field(default=None, min_length=1)
+    base_url: AnyHttpUrl | None = None
+    temperature: float = Field(default=0, ge=0, le=2)
+    timeout_seconds: float = Field(default=60, gt=0)
+    max_retries: int = Field(default=2, ge=0)
+    max_source_chars: int = Field(default=20_000, gt=0)
+    prompt_version: str = Field(default="v1", min_length=1)
+
+
 class EvaluationConfig(StrictModel):
     pass_threshold: float = Field(default=70, ge=0, le=100)
     weights: EvaluationWeights = Field(default_factory=EvaluationWeights)
+    llm_judge: LLMJudgeConfig = Field(default_factory=LLMJudgeConfig)
 
 
 class ServiceValues(StrictModel):

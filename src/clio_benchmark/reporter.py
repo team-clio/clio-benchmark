@@ -11,6 +11,8 @@ class Summary(Protocol):
     failed_cases: int
     detected_cases: int
     location_matches: int
+    llm_evaluated_cases: int
+    llm_failed_cases: int
 
 
 def render_markdown_report(run_id: str, summary: Summary) -> str:
@@ -38,6 +40,9 @@ def render_markdown_report(run_id: str, summary: Summary) -> str:
 
 ## Quality score
 
-The final quality score is pending LLM Judge evaluation. Efficiency metrics and qualitative
-scores are intentionally not combined until every required evaluation dimension is available.
+- LLM Judge completed: {summary.llm_evaluated_cases}/{summary.total_cases}
+- LLM Judge failed: {summary.llm_failed_cases}/{summary.total_cases}
+
+The final quality score is pending score aggregation. Efficiency metrics and qualitative scores
+are intentionally not combined until every required evaluation dimension is available.
 """

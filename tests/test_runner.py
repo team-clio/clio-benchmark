@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 from clio_benchmark.config import SuiteConfig, load_config
-from clio_benchmark.errors import ClioApiError
+from clio_benchmark.errors import ClioApiError, EvaluationError
+from clio_benchmark.llm_judge import JudgeDimension, LLMJudgeResult
 from clio_benchmark.runner import BenchmarkRunner
 from clio_benchmark.suite import (
     BenchmarkCase,
@@ -72,6 +73,26 @@ class FakeClient:
         }
 
 
+class FakeJudge:
+    @property
+    def metadata(self) -> dict[str, object]:
+        return {"model": "fake-judge", "promptVersion": "test"}
+
+    def evaluate(self, *args, **kwargs) -> LLMJudgeResult:
+        dimension = JudgeDimension(score=3, rationale="supported by the fixture")
+        return LLMJudgeResult(
+            root_cause_accuracy=dimension,
+            explanation_quality=dimension,
+            solution_validity=dimension,
+            evidence_quality=dimension,
+        )
+
+
+class FailingJudge(FakeJudge):
+    def evaluate(self, *args, **kwargs) -> LLMJudgeResult:
+        raise EvaluationError("judge unavailable")
+
+
 def test_runner_keeps_running_after_case_failure_and_writes_report(tmp_path: Path) -> None:
     config = load_config(Path("benchmark.example.yaml"))
     suite_config = config.suites[0]
@@ -106,4 +127,76 @@ def test_runner_keeps_running_after_case_failure_and_writes_report(tmp_path: Pat
     )
     assert failed_metrics["status"] == "infra_error"
     assert (run_dir / "summary.json").exists()
-    assert "pending LLM Judge" in (run_dir / "report.md").read_text()
+    evaluation = json.loads(
+        (run_dir / "cases/feature-flags/BUG-OK/evaluation.json").read_text()
+    )
+    assert evaluation["llmJudge"]["status"] == "disabled"
+    assert "pending score aggregation" in (run_dir / "report.md").read_text()
+
+
+def test_runner_persists_structured_llm_judge_result(tmp_path: Path) -> None:
+    config = load_config(Path("benchmark.example.yaml"))
+    suite_config = config.suites[0]
+    suite_path = tmp_path / "suite"
+    suite_path.mkdir()
+    prepared = PreparedSuite(
+        config=suite_config,
+        path=suite_path,
+        commit_sha="abc123",
+        cases=CasesFile(schemaVersion=1, cases=[_case("BUG-OK")]),
+        ground_truth=BugsFile(schemaVersion=1, bugs=[_truth("BUG-OK")]),
+    )
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    runner = BenchmarkRunner(
+        config,
+        workspace,
+        FakeClient(),  # type: ignore[arg-type]
+        FakeSuiteRepository(prepared),  # type: ignore[arg-type]
+        FakeJudge(),
+    )
+
+    summary = runner.execute(manifest)
+
+    evaluation = json.loads(
+        (workspace.runs / manifest.run_id / "cases/feature-flags/BUG-OK/evaluation.json")
+        .read_text()
+    )
+    assert summary.llm_evaluated_cases == 1
+    assert evaluation["llmJudge"]["status"] == "completed"
+    assert evaluation["llmJudge"]["metadata"]["model"] == "fake-judge"
+    assert evaluation["llmJudge"]["result"]["root_cause_accuracy"]["score"] == 3
+
+
+def test_runner_isolates_llm_judge_failure(tmp_path: Path) -> None:
+    config = load_config(Path("benchmark.example.yaml"))
+    suite_config = config.suites[0]
+    suite_path = tmp_path / "suite"
+    suite_path.mkdir()
+    prepared = PreparedSuite(
+        config=suite_config,
+        path=suite_path,
+        commit_sha="abc123",
+        cases=CasesFile(schemaVersion=1, cases=[_case("BUG-OK")]),
+        ground_truth=BugsFile(schemaVersion=1, bugs=[_truth("BUG-OK")]),
+    )
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    runner = BenchmarkRunner(
+        config,
+        workspace,
+        FakeClient(),  # type: ignore[arg-type]
+        FakeSuiteRepository(prepared),  # type: ignore[arg-type]
+        FailingJudge(),
+    )
+
+    summary = runner.execute(manifest)
+
+    run_dir = workspace.runs / manifest.run_id
+    evaluation = json.loads(
+        (run_dir / "cases/feature-flags/BUG-OK/evaluation.json").read_text()
+    )
+    metrics = json.loads((run_dir / "cases/feature-flags/BUG-OK/metrics.json").read_text())
+    assert summary.llm_failed_cases == 1
+    assert evaluation["llmJudge"]["status"] == "failed"
+    assert metrics["status"] == "evaluation_failed"

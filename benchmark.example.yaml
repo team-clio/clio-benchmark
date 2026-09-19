@@ -16,6 +16,17 @@ runtime:
 
 evaluation:
   pass_threshold: 70
+  llm_judge:
+    enabled: false
+    provider: openai
+    # provider 기본값을 덮어쓸 때만 model, api_key_env, base_url을 지정한다.
+    # model: gpt-4.1
+    # api_key_env: OPENAI_API_KEY
+    temperature: 0
+    timeout_seconds: 60
+    max_retries: 2
+    max_source_chars: 20000
+    prompt_version: v1
   weights:
     recall: 25
     precision: 20

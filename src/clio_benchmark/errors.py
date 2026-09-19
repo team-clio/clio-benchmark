@@ -27,3 +27,7 @@ class BenchmarkTimeout(ClioApiError):
 
 class ClioAnalysisError(BenchmarkError):
     """Raised when Clio finishes without producing an evaluable analysis result."""
+
+
+class EvaluationError(BenchmarkError):
+    """Raised when a benchmark result cannot be evaluated."""

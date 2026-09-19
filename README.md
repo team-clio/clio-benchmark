@@ -13,9 +13,22 @@
 - 결정적 Bug 탐지·코드 위치 평가
 - Case별 오류 격리와 부분 실패 실행
 - 실행 요약과 Markdown report 생성
+- LangChain 기반 LLM Judge 구조화 평가
 - 품질 점수 골격과 별도 효율성 지표
 
-Clio Agent·Server의 Docker 실행 자동화와 LLM Judge 평가는 다음 구현 단계입니다. 현재 `run`은 설정된 주소에서 두 서비스가 이미 실행 중이어야 하며, 최종 Quality Score는 LLM 평가가 완료되기 전까지 `pending`으로 기록합니다.
+Clio Agent·Server의 Docker 실행 자동화와 최종 점수 집계는 다음 구현 단계입니다. 현재
+`run`은 설정된 주소에서 두 서비스가 이미 실행 중이어야 합니다. LLM Judge를 사용하려면
+`evaluation.llm_judge.enabled`를 `true`로 설정하고 `api_key_env`가 가리키는 환경 변수에
+API 키를 입력합니다. Judge 결과와 모델·프롬프트 설정은 Case별 `evaluation.json`에 저장됩니다.
+`provider`는 `openai` 또는 `deepseek`를 지원합니다. DeepSeek는 기본적으로
+`DEEPSEEK_API_KEY`, `https://api.deepseek.com`, `deepseek-flash`를 사용합니다.
+
+```yaml
+evaluation:
+  llm_judge:
+    enabled: true
+    provider: deepseek
+```
 
 ## 시작하기
 
