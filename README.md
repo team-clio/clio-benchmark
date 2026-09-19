@@ -1,18 +1,21 @@
 # Clio Benchmark
 
-여러 벤치마크 저장소를 같은 조건에서 실행하고 Clio의 버그 분석 품질과 실행 효율을 평가하는 도구입니다.
+여러 벤치마크 저장소를 같은 조건에서 실행하고 Clio의 버그 분석 품질과 실행 효율을 평가하는 도구입니다. Clio에 제출하는 입력과 평가용 Ground Truth를 분리하여 정답이 Agent에 노출되지 않도록 합니다.
 
 ## 현재 구현 범위
 
 - Python 패키지와 `clio-benchmark` CLI
 - YAML 설정 검증 및 비밀 값이 제거된 실행 manifest
 - 빈 테스트 저장소 목록을 허용하는 실행 흐름
-- 테스트 저장소 checkout과 `benchmark.json` 검증
+- 테스트 저장소 checkout과 `cases.json`/`bugs.json` 검증
 - Clio 프로젝트·저장소·버그 생성 및 완료 polling
-- suite commit, Clio 리소스와 분석 결과 저장
-- 품질 점수 집계와 별도 효율성 지표
+- suite commit, Clio 원시 결과와 정규화된 결과 저장
+- 결정적 Bug 탐지·코드 위치 평가
+- Case별 오류 격리와 부분 실패 실행
+- 실행 요약과 Markdown report 생성
+- 품질 점수 골격과 별도 효율성 지표
 
-Clio Agent·Server의 Docker 실행 자동화와 oracle 기반 자동 채점은 다음 구현 단계입니다. 현재 `run`은 설정된 주소에서 두 서비스가 이미 실행 중이어야 합니다.
+Clio Agent·Server의 Docker 실행 자동화와 LLM Judge 평가는 다음 구현 단계입니다. 현재 `run`은 설정된 주소에서 두 서비스가 이미 실행 중이어야 하며, 최종 Quality Score는 LLM 평가가 완료되기 전까지 `pending`으로 기록합니다.
 
 ## 시작하기
 
@@ -22,11 +25,31 @@ uv sync --extra dev
 uv run clio-benchmark setup
 uv run clio-benchmark run
 uv run clio-benchmark status
+uv run clio-benchmark report
 ```
 
 로컬 키는 git에서 제외되는 `benchmark.local.yaml`의 `secrets`에 입력합니다. 실행 manifest에는 값 대신 키 이름만 저장됩니다.
 
-기본 예시는 `team-clio/clio-benchmark-fixture-feature-flags`의 실제 버그 리포트 한 건을 실행합니다. `benchmark.json`은 Agent 분석에서 제외해 정답 유출을 방지합니다.
+기본 예시는 `team-clio/clio-benchmark-fixture-feature-flags`를 사용합니다. Fixture 저장소에는 다음 두 파일이 필요합니다.
+
+- `cases.json`: Clio에 제출할 사용자 관점의 Bug Report
+- `bugs.json`: Benchmark Evaluator만 사용하는 실제 원인과 코드 위치
+
+두 파일은 저장소 등록 시 Clio 분석 대상에서 제외됩니다. 두 파일의 Case ID 집합은 정확히 일치해야 합니다.
+
+실행 결과는 다음 구조로 저장됩니다.
+
+```text
+.benchmark/runs/<run-id>/
+├── manifest.json
+├── summary.json
+├── report.md
+└── cases/<suite>/<case-id>/
+    ├── input.json
+    ├── clio-result.json
+    ├── evaluation.json
+    └── metrics.json
+```
 
 ## 문서
 

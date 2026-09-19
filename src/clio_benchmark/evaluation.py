@@ -8,15 +8,18 @@ from enum import StrEnum
 
 from clio_benchmark.config import EvaluationConfig
 from clio_benchmark.errors import BenchmarkError
+from clio_benchmark.result import NormalizedResult
+from clio_benchmark.suite import GroundTruth
 
 
 class Dimension(StrEnum):
-    VERDICT = "verdict"
-    ROOT_CAUSE = "root_cause"
-    CODE_LOCATION = "code_location"
-    EVIDENCE_QUALITY = "evidence_quality"
-    REPRODUCTION = "reproduction"
-    UNCERTAINTY = "uncertainty"
+    RECALL = "recall"
+    PRECISION = "precision"
+    LOCATION_ACCURACY = "location_accuracy"
+    ROOT_CAUSE_ACCURACY = "root_cause_accuracy"
+    EXPLANATION_QUALITY = "explanation_quality"
+    SOLUTION_VALIDITY = "solution_validity"
+    EXECUTION_RELIABILITY = "execution_reliability"
 
 
 class EvaluationMethod(StrEnum):
@@ -71,6 +74,50 @@ class ScoreReport:
     passed: bool
     dimensions: tuple[DimensionResult, ...]
     efficiency: EfficiencyMetrics
+
+
+@dataclass(frozen=True)
+class DeterministicEvaluation:
+    detected: bool
+    location_matches: bool
+    matched_location: str | None
+
+
+def evaluate_deterministic(
+    result: NormalizedResult, ground_truth: GroundTruth
+) -> DeterministicEvaluation:
+    """Evaluate facts that do not require an LLM judge."""
+    expected_path = _normalized_path(ground_truth.location.file)
+    expected_start, expected_end = ground_truth.location.lines
+    tolerance = ground_truth.location_tolerance
+
+    for location in result.locations:
+        if _normalized_path(location.file) != expected_path:
+            continue
+        if location.start_line is None:
+            continue
+        actual_start = location.start_line
+        actual_end = location.end_line or actual_start
+        overlaps = (
+            actual_end >= expected_start - tolerance
+            and actual_start <= expected_end + tolerance
+        )
+        if overlaps:
+            return DeterministicEvaluation(
+                detected=result.detected,
+                location_matches=True,
+                matched_location=f"{location.file}:{actual_start}-{actual_end}",
+            )
+
+    return DeterministicEvaluation(
+        detected=result.detected,
+        location_matches=False,
+        matched_location=None,
+    )
+
+
+def _normalized_path(value: str) -> str:
+    return value.replace("\\", "/").removeprefix("./")
 
 
 def aggregate_score(

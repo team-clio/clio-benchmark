@@ -71,3 +71,14 @@ class Workspace:
         )
         temporary.replace(destination)
         return destination
+
+    def write_run_text(self, run_id: str, relative_path: Path, content: str) -> Path:
+        run_dir = (self.runs / run_id).resolve()
+        destination = (run_dir / relative_path).resolve()
+        if not destination.is_relative_to(run_dir):
+            raise WorkspaceError(f"Artifact path escapes run directory: {relative_path}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name(f".{destination.name}.tmp")
+        temporary.write_text(content, encoding="utf-8")
+        temporary.replace(destination)
+        return destination

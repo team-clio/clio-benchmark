@@ -17,12 +17,13 @@ runtime:
 evaluation:
   pass_threshold: 70
   weights:
-    verdict: 20
-    root_cause: 35
-    code_location: 15
-    evidence_quality: 15
-    reproduction: 10
-    uncertainty: 5
+    recall: 25
+    precision: 20
+    location_accuracy: 10
+    root_cause_accuracy: 20
+    explanation_quality: 10
+    solution_validity: 10
+    execution_reliability: 5
 
 environment:
   agent: {}

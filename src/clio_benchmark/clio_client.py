@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from clio_benchmark.errors import ClioApiError
+from clio_benchmark.errors import BenchmarkTimeout, ClioApiError
 from clio_benchmark.suite import BenchmarkCase
 
 
@@ -37,7 +37,8 @@ class ClioClient:
             "url": repository_url,
             "defaultBranch": revision,
             "includePaths": [],
-            "excludePaths": ["benchmark.json"],
+            # Fixture inputs and private oracle data must never be indexed by Clio.
+            "excludePaths": ["cases.json", "bugs.json"],
             "enabled": True,
         }
         return self._request("POST", f"/api/v1/projects/{project_id}/repositories", payload)
@@ -64,7 +65,7 @@ class ClioClient:
                 if status == "FAILED":
                     raise ClioApiError(f"Repository synchronization failed: {repository_id}")
             time.sleep(poll_interval_seconds)
-        raise ClioApiError(f"Repository synchronization timed out: {repository_id}")
+        raise BenchmarkTimeout(f"Repository synchronization timed out: {repository_id}")
 
     def create_bug(self, project_id: int, case: BenchmarkCase) -> dict[str, Any]:
         report = case.report
@@ -97,7 +98,7 @@ class ClioClient:
             if bug is not None and bug.get("status") in {"TRIAGED", "RESOLVED", "IGNORED"}:
                 return bug
             time.sleep(poll_interval_seconds)
-        raise ClioApiError(f"Bug processing timed out: {bug_id}")
+        raise BenchmarkTimeout(f"Bug processing timed out: {bug_id}")
 
     def wait_for_analysis(
         self,
@@ -124,7 +125,7 @@ class ClioClient:
             if response.status_code != 404:
                 self._raise_response(response)
             time.sleep(poll_interval_seconds)
-        raise ClioApiError(f"Analysis result timed out for issue: {issue_id}")
+        raise BenchmarkTimeout(f"Analysis result timed out for issue: {issue_id}")
 
     def _request(
         self, method: str, path: str, payload: dict[str, Any] | None = None

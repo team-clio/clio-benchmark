@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "bugs": [
+    {
+      "id": "BUG-001",
+      "description": "Cache invalidation is missing.",
+      "location": {"file": "src/feature_flag/service.py", "lines": [42, 58]},
+      "rootCause": "The update path does not invalidate the cache.",
+      "category": "cache",
+      "severity": "high",
+      "locationTolerance": 3,
+      "requiredConcepts": ["cache invalidation"]
+    }
+  ]
+}

@@ -52,9 +52,10 @@ def run(
     local_workspace.save_manifest(manifest)
     client = ClioClient(str(benchmark_config.runtime.server_url))
     try:
-        manifest.case_count = BenchmarkRunner(benchmark_config, local_workspace, client).execute(
-            manifest
-        )
+        summary = BenchmarkRunner(benchmark_config, local_workspace, client).execute(manifest)
+        manifest.case_count = summary.total_cases
+        manifest.completed_case_count = summary.completed_cases
+        manifest.failed_case_count = summary.failed_cases
     except KeyboardInterrupt as exc:
         manifest.transition(RunStatus.CANCELLED, error="Interrupted by user")
         local_workspace.save_manifest(manifest)
@@ -67,7 +68,12 @@ def run(
         raise typer.Exit(code=2) from exc
     finally:
         client.close()
-    manifest.transition(RunStatus.COMPLETED)
+    final_status = (
+        RunStatus.COMPLETED_WITH_ERRORS
+        if manifest.failed_case_count
+        else RunStatus.COMPLETED
+    )
+    manifest.transition(final_status)
     local_workspace.save_manifest(manifest)
     typer.echo(f"Run {manifest.run_id} completed: {manifest.case_count} case(s)")
 
@@ -89,6 +95,29 @@ def status(
         typer.echo("No benchmark runs found")
         return
     typer.echo(json.dumps(manifest.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@app.command()
+def report(
+    workspace: Annotated[Path, typer.Option()] = Path(".benchmark"),
+    run_id: Annotated[str | None, typer.Option()] = None,
+) -> None:
+    """Print the generated Markdown report for a benchmark run."""
+    local_workspace = Workspace(workspace)
+    try:
+        manifest = (
+            local_workspace.load_manifest(run_id) if run_id else local_workspace.latest_manifest()
+        )
+    except BenchmarkError as exc:
+        _exit_with_error(exc)
+    if manifest is None:
+        typer.echo("No benchmark runs found")
+        return
+    report_path = local_workspace.runs / manifest.run_id / "report.md"
+    if not report_path.exists():
+        typer.echo(f"Report not found for run: {manifest.run_id}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(report_path.read_text(encoding="utf-8"))
 
 
 def _load_or_exit(path: Path) -> BenchmarkConfig:

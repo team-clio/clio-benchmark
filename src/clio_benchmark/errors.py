@@ -19,3 +19,11 @@ class SuiteError(BenchmarkError):
 
 class ClioApiError(BenchmarkError):
     """Raised when Clio Server cannot complete a benchmark operation."""
+
+
+class BenchmarkTimeout(ClioApiError):
+    """Raised when an external benchmark operation exceeds its deadline."""
+
+
+class ClioAnalysisError(BenchmarkError):
+    """Raised when Clio finishes without producing an evaluable analysis result."""

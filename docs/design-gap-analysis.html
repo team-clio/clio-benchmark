@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clio Benchmark 설계와 현재 구현 비교</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #667085;
+      --line: #dfe4ec;
+      --surface: #ffffff;
+      --soft: #f6f8fb;
+      --brand: #4f46e5;
+      --brand-soft: #eef2ff;
+      --good: #087a55;
+      --good-soft: #eaf8f2;
+      --warn: #a15c00;
+      --warn-soft: #fff6e5;
+      --danger: #b42318;
+      --danger-soft: #fff0ee;
+      --shadow: 0 14px 38px rgba(23, 32, 51, .08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #edf1f7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+      line-height: 1.68;
+      word-break: keep-all;
+    }
+    a { color: var(--brand); }
+    code {
+      padding: .12em .38em;
+      border-radius: 5px;
+      background: #edf0f5;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .9em;
+      word-break: break-word;
+    }
+    .page {
+      width: min(1160px, calc(100% - 32px));
+      margin: 32px auto;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    header {
+      padding: 64px 72px 52px;
+      color: white;
+      background:
+        radial-gradient(circle at 85% 15%, rgba(255,255,255,.16), transparent 28%),
+        linear-gradient(135deg, #302c8f, #4f46e5 56%, #2563eb);
+    }
+    header .eyebrow {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      opacity: .82;
+    }
+    h1 { margin: 0; font-size: clamp(32px, 5vw, 52px); line-height: 1.16; }
+    header .lead { max-width: 760px; margin: 20px 0 0; font-size: 19px; opacity: .92; }
+    header .meta { margin-top: 28px; font-size: 14px; opacity: .75; }
+    main { padding: 48px 72px 72px; }
+    section { margin-top: 62px; }
+    section:first-child { margin-top: 0; }
+    h2 { margin: 0 0 20px; font-size: 28px; line-height: 1.3; }
+    h3 { margin: 0 0 10px; font-size: 20px; }
+    p { margin: 8px 0 14px; }
+    .summary {
+      padding: 24px 28px;
+      border-left: 5px solid var(--brand);
+      background: var(--brand-soft);
+      font-size: 17px;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .done { color: var(--good); background: var(--good-soft); }
+    .partial { color: var(--warn); background: var(--warn-soft); }
+    .missing { color: var(--danger); background: var(--danger-soft); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 800px; }
+    th, td { padding: 15px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--soft); font-size: 13px; color: #475467; }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { width: 17%; font-weight: 700; }
+    td:last-child { width: 13%; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .card { padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+    .card.critical { border-top: 4px solid var(--danger); }
+    .card.important { border-top: 4px solid var(--warn); }
+    .card.foundation { border-top: 4px solid var(--good); }
+    .card ul { margin: 12px 0 0; padding-left: 21px; }
+    .card li + li { margin-top: 5px; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 20px;
+    }
+    .flow .step { position: relative; padding: 16px 12px; border-radius: 10px; background: var(--soft); text-align: center; font-weight: 700; }
+    .flow .step:not(:last-child)::after { content: "→"; position: absolute; right: -17px; top: 14px; z-index: 2; color: #98a2b3; font-size: 20px; }
+    .flow .active { color: var(--good); background: var(--good-soft); }
+    .flow .future { color: var(--danger); background: var(--danger-soft); }
+    .decision {
+      padding: 24px 26px;
+      border: 1px solid #c7d2fe;
+      border-radius: 14px;
+      background: #f8f9ff;
+    }
+    .decision strong { color: #3730a3; }
+    .roadmap { counter-reset: priority; display: grid; gap: 14px; }
+    .roadmap article {
+      position: relative;
+      padding: 19px 20px 19px 72px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .roadmap article::before {
+      counter-increment: priority;
+      content: counter(priority);
+      position: absolute;
+      left: 20px;
+      top: 20px;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: white;
+      background: var(--brand);
+      font-weight: 800;
+    }
+    .roadmap h3 { font-size: 17px; }
+    .roadmap p { margin: 4px 0 0; color: var(--muted); }
+    .callout { padding: 19px 22px; border-radius: 12px; background: var(--warn-soft); color: #7a4600; }
+    .file-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .file-list div { padding: 13px 15px; border-radius: 8px; background: var(--soft); }
+    footer { padding: 28px 72px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+
+    @media (max-width: 800px) {
+      .page { width: 100%; margin: 0; }
+      header, main, footer { padding-left: 24px; padding-right: 24px; }
+      header { padding-top: 44px; }
+      .cards, .file-list { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .flow .step:not(:last-child)::after { content: "↓"; right: auto; top: auto; left: 50%; bottom: -19px; }
+    }
+    @media print {
+      body { background: white; }
+      .page { width: 100%; margin: 0; box-shadow: none; }
+      header { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <p class="eyebrow">Clio Benchmark · Gap Analysis</p>
+      <h1>설계와 현재 구현은<br>무엇이 다른가?</h1>
+      <p class="lead">Confluence의 「벤치마크 프로세스 설계」와 「벤치마크 시스템 설계」를 현재 코드베이스와 비교하고, 실제로 수정해야 할 사항을 우선순위에 따라 정리한 문서입니다.</p>
+      <p class="meta">기준 코드: clio-benchmark 저장소 · 작성일: 2026-09-19</p>
+    </header>
+
+    <main>
+      <section>
+        <h2>한눈에 보는 결론</h2>
+        <div class="summary">
+          전환 브랜치에서는 <strong>입력과 Ground Truth 분리, 결정적 평가, Case별 오류 격리, 결과 요약과 리포트</strong>까지 반영했습니다. “특정 Clio 버전을 직접 실행하고 정성 평가까지 완료하는 완전한 벤치마크 시스템”이 되려면 Runtime Manager와 LLM Judge가 추가로 필요합니다.
+        </div>
+        <div class="flow" aria-label="현재 구현에서 목표 시스템까지의 흐름">
+          <div class="step active">저장소 준비</div>
+          <div class="step active">Clio API 실행</div>
+          <div class="step active">원시 결과 저장</div>
+          <div class="step future">정답 기반 평가</div>
+          <div class="step future">점수·비교 리포트</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>영역별 차이</h2>
+        <div class="legend">
+          <span class="tag done">구현됨</span>
+          <span class="tag partial">일부 구현</span>
+          <span class="tag missing">미구현·변경 필요</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>영역</th><th>설계가 요구하는 것</th><th>현재 구현</th><th>판정</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>실행 환경</td><td>Server/Agent를 지정 revision으로 checkout하고 build, start, health check, stop까지 관리</td><td>설정된 <code>server_url</code>에 접속하며, 서비스가 이미 실행 중이어야 함</td><td><span class="tag missing">미구현</span></td></tr>
+              <tr><td>테스트 데이터</td><td><code>bugs.json</code>을 Ground Truth 중심 모델로 사용</td><td><code>cases.json</code> 입력과 <code>bugs.json</code> Ground Truth로 분리</td><td><span class="tag done">구현됨</span></td></tr>
+              <tr><td>정답 격리</td><td>Benchmark만 정답을 읽고, Clio에는 소스 코드만 노출</td><td>두 fixture 파일을 Clio 인덱싱 대상에서 제외</td><td><span class="tag partial">API 격리</span></td></tr>
+              <tr><td>실행 흐름</td><td>프로젝트·저장소·Bug 생성, 완료 대기, 결과 수집</td><td>해당 API 흐름과 polling이 구현됨</td><td><span class="tag done">구현됨</span></td></tr>
+              <tr><td>결과 정규화</td><td>Clio 응답을 공통 내부 모델로 변환</td><td>원시 응답과 안정된 <code>NormalizedResult</code> 모델을 분리</td><td><span class="tag done">구현됨</span></td></tr>
+              <tr><td>결정적 평가</td><td>탐지, precision/recall, 파일·라인 위치, 실패·timeout을 코드로 계산</td><td>탐지·파일·라인 tolerance와 실패·timeout 분류를 구현</td><td><span class="tag partial">일부 구현</span></td></tr>
+              <tr><td>LLM Judge</td><td>원인·설명·해결책·근거를 구조화된 결과로 평가</td><td><code>llm_judge</code>라는 타입만 있고 실제 호출은 없음</td><td><span class="tag missing">미구현</span></td></tr>
+              <tr><td>점수 집계</td><td>Case 평가를 집계해 Run 전체 품질 점수를 생성</td><td>LLM 평가가 없으면 최종 점수를 만들지 않고 pending으로 명시</td><td><span class="tag partial">부분 구현</span></td></tr>
+              <tr><td>리포트</td><td>Case 결과, summary, category 점수, 이전 실행 대비 변화 제공</td><td>분리된 Case 결과, <code>summary.json</code>, <code>report.md</code> 생성</td><td><span class="tag partial">부분 구현</span></td></tr>
+              <tr><td>오류 분류</td><td>Clio 실패, 평가 실패, 인프라 오류, timeout을 구분</td><td>Run 전체를 <code>completed/failed/cancelled</code>로만 구분</td><td><span class="tag partial">단순화</span></td></tr>
+              <tr><td>부분 실패</td><td>한 Case가 실패해도 나머지는 계속 실행</td><td>Case별 오류를 기록하고 다음 Case 실행을 계속함</td><td><span class="tag done">구현됨</span></td></tr>
+              <tr><td>재현 정보</td><td>실제 commit SHA, 모델, prompt, judge, 환경을 기록</td><td>설정 revision과 suite commit 중심이며 실제 Clio SHA·모델 정보 없음</td><td><span class="tag partial">부족</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>꼭 수정해야 하는 핵심 사항</h2>
+        <div class="cards">
+          <article class="card critical">
+            <h3>1. 입력 데이터와 정답 데이터의 역할 분리</h3>
+            <p>현재 <code>benchmark.json</code>은 사용자 Bug Report 역할을 합니다. 새 <code>bugs.json</code>은 실제 원인과 위치를 가진 정답입니다. 두 역할을 하나로 볼 수 없습니다.</p>
+            <ul>
+              <li><code>cases.json</code>: Clio에 제출할 사용자 관찰 정보</li>
+              <li><code>bugs.json</code>: Evaluator만 읽는 Ground Truth</li>
+              <li>두 파일은 동일한 <code>case_id</code>로 연결</li>
+            </ul>
+          </article>
+          <article class="card critical">
+            <h3>2. Ground Truth가 Clio에 보이지 않도록 격리</h3>
+            <p><code>bugs.json</code>을 저장소에 추가하면서 기존 exclude 목록을 그대로 두면 Agent가 정답을 볼 수 있습니다.</p>
+            <ul>
+              <li>Benchmark 전용 원본 workspace 유지</li>
+              <li>Case 실행 전에 Clio 전용 workspace 생성</li>
+              <li>정답·평가 설정을 물리적으로 제거한 소스만 전달</li>
+            </ul>
+          </article>
+          <article class="card important">
+            <h3>3. 평가 가능한 내부 결과 모델 도입</h3>
+            <p>현재는 Clio API 응답 형태에 직접 의존합니다. 평가 전에 결과를 안정된 내부 모델로 변환해야 합니다.</p>
+            <ul>
+              <li>판정, root cause, 파일 및 라인 범위</li>
+              <li>근거, 해결 방법, confidence</li>
+              <li>토큰, 도구 호출, 실행 시간</li>
+            </ul>
+          </article>
+          <article class="card important">
+            <h3>4. 실제 Evaluator 구현과 Runner 연결</h3>
+            <p>현재 점수 합산 함수는 있지만 점수의 재료를 만드는 로직이 없습니다.</p>
+            <ul>
+              <li>먼저 파일·라인·탐지 여부를 결정적으로 평가</li>
+              <li>의미 판단만 LLM Judge에 전달</li>
+              <li>구조화된 평가 결과를 Score Aggregator로 전달</li>
+            </ul>
+          </article>
+          <article class="card important">
+            <h3>5. Case 단위 실패 격리</h3>
+            <p>하나의 timeout이나 API 오류 때문에 전체 Run이 중단되지 않아야 합니다.</p>
+            <ul>
+              <li>Case 루프 내부에서 오류 포착</li>
+              <li><code>CLIO_FAILED</code>, <code>INFRA_ERROR</code>, <code>TIMEOUT</code> 기록</li>
+              <li>남은 Case 실행 후 <code>COMPLETED_WITH_ERRORS</code>로 집계</li>
+            </ul>
+          </article>
+          <article class="card important">
+            <h3>6. Runtime Manager 추가</h3>
+            <p>설정에 적힌 revision과 실제 실행 중인 Clio 코드가 일치하도록 Benchmark가 런타임을 소유해야 합니다.</p>
+            <ul>
+              <li>clone/checkout/build/start/health/stop</li>
+              <li>Server·Agent 실제 commit SHA 기록</li>
+              <li>DB·Message Broker 등 의존 서비스 관리</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>먼저 확정해야 할 설계 결정</h2>
+        <div class="decision">
+          <h3>Bug 입력과 Ground Truth를 어떤 형식으로 관리할 것인가?</h3>
+          <p>두 Confluence 문서에서는 <code>bugs.json</code>으로 Bug Report를 만든다고 설명하지만, 예시 데이터에는 사용자 입력에 필요한 재현 절차와 기대·실제 동작이 없습니다.</p>
+          <p><strong>권장안:</strong> Clio 입력과 정답을 별도 파일로 분리합니다. 입력은 실제 사용자 Bug Report와 최대한 유사하게 유지하고, 정답은 Benchmark Evaluator만 접근하게 합니다. 이렇게 하면 데이터 누출을 예방하고 입력 시나리오도 독립적으로 개선할 수 있습니다.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>권장 구현 순서</h2>
+        <div class="roadmap">
+          <article><h3>데이터 계약 확정</h3><p><code>cases.json</code>과 <code>bugs.json</code> 스키마, 연결 키, 버전 정책을 정합니다.</p></article>
+          <article><h3>Workspace 및 정답 격리</h3><p>원본 fixture와 Clio 노출용 workspace를 분리하고 누출 방지 테스트를 추가합니다.</p></article>
+          <article><h3>결과 모델과 상태 모델 정리</h3><p><code>NormalizedResult</code>, Case 상태, 오류 유형, 상태 변경 시각을 정의합니다.</p></article>
+          <article><h3>Deterministic Evaluator 구현</h3><p>Bug 탐지, 파일·라인 위치, 누락, 실패, timeout부터 코드로 평가합니다.</p></article>
+          <article><h3>결과 파일과 Summary 생성</h3><p><code>input.json</code>, <code>clio-result.json</code>, <code>evaluation.json</code>, <code>metrics.json</code>, <code>summary.json</code>으로 분리합니다.</p></article>
+          <article><h3>부분 실패 지원</h3><p>Case별 오류를 보존하면서 나머지 Case 실행을 이어가도록 Runner를 변경합니다.</p></article>
+          <article><h3>Runtime Manager 구현</h3><p>Clio 실행 환경을 자동화하고 실제 commit 및 환경 정보를 manifest에 기록합니다.</p></article>
+          <article><h3>LLM Judge와 비교 리포트 추가</h3><p>정성 평가, category별 결과, 이전 Run 대비 변화를 최종 단계에서 추가합니다.</p></article>
+        </div>
+      </section>
+
+      <section>
+        <h2>현재 구현에서 유지할 좋은 기반</h2>
+        <div class="cards">
+          <article class="card foundation"><h3>구조</h3><p>단일 Python CLI, Runner 중심 오케스트레이션, API를 통한 Clio 호출은 새 설계 방향과 일치합니다.</p></article>
+          <article class="card foundation"><h3>재현성과 보안</h3><p>suite commit 기록, secret redaction, 실행별 manifest와 원자적 파일 저장은 그대로 확장할 수 있습니다.</p></article>
+          <article class="card foundation"><h3>실행 흐름</h3><p>프로젝트 생성, 저장소 등록, 동기화 대기, Bug 생성, 결과 polling은 핵심 수직 흐름으로 재사용할 수 있습니다.</p></article>
+          <article class="card foundation"><h3>평가 골격</h3><p>품질 점수와 효율성 지표를 분리한 모델, 설정 가능한 가중치 구조는 유지할 가치가 있습니다.</p></article>
+        </div>
+      </section>
+
+      <section>
+        <h2>주요 수정 대상 파일</h2>
+        <div class="file-list">
+          <div><code>suite.py</code><br>새 fixture 및 Ground Truth 데이터 모델</div>
+          <div><code>clio_client.py</code><br>정답 누출 방지와 workflow 추적 계약</div>
+          <div><code>runner.py</code><br>평가 연결, Case 오류 격리, 단계별 실행</div>
+          <div><code>evaluation.py</code><br>실제 deterministic/LLM 평가기</div>
+          <div><code>workspace.py</code><br>Clio 전용 workspace와 결과 파일 구조</div>
+          <div><code>manifest.py</code><br>세분화된 상태·환경·commit·모델 정보</div>
+          <div><code>cli.py</code><br>실제 setup/down/report 명령</div>
+          <div><code>config.py</code><br>Judge, runtime, dataset 설정 확장</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>검증 시 참고 사항</h2>
+        <div class="callout">
+          전환 후 테스트 fixture는 저장소 내부로 이동했으며 외부 디렉터리 의존성을 제거했습니다. 현재 단위·통합 테스트 17개와 Ruff 정적 검사가 모두 통과합니다.
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      이 문서는 Confluence의 「벤치마크 프로세스 설계」, 「벤치마크 시스템 설계」와 2026-09-19 기준 clio-benchmark 코드베이스를 비교해 작성했습니다.
+    </footer>
+  </div>
+</body>
+</html>

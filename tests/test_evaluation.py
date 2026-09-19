@@ -8,7 +8,10 @@ from clio_benchmark.evaluation import (
     EfficiencyMetrics,
     EvaluationMethod,
     aggregate_score,
+    evaluate_deterministic,
 )
+from clio_benchmark.result import NormalizedLocation, NormalizedResult
+from clio_benchmark.suite import GroundTruth, SourceLocation
 
 
 def result(dimension: Dimension, value: float) -> DimensionResult:
@@ -34,14 +37,33 @@ def test_aggregates_quality_and_keeps_efficiency_separate() -> None:
 
 def test_requires_every_weighted_dimension() -> None:
     with pytest.raises(BenchmarkError, match="Missing required score dimensions"):
-        aggregate_score([result(Dimension.VERDICT, 1)], EvaluationConfig())
+        aggregate_score([result(Dimension.RECALL, 1)], EvaluationConfig())
 
 
 def test_rejects_out_of_range_dimension_value() -> None:
     with pytest.raises(ValueError, match="between 0 and 1"):
-        result(Dimension.VERDICT, 1.1)
+        result(Dimension.RECALL, 1.1)
 
 
 def test_rejects_negative_efficiency_metrics() -> None:
     with pytest.raises(ValueError, match="must not be negative"):
         EfficiencyMetrics(input_tokens=-1)
+
+
+def test_deterministic_evaluation_applies_location_tolerance() -> None:
+    truth = GroundTruth(
+        id="BUG-001",
+        description="bug",
+        location=SourceLocation(file="src/service.py", lines=(40, 45)),
+        rootCause="missing invalidation",
+        locationTolerance=3,
+    )
+    normalized = NormalizedResult(
+        detected=True,
+        locations=[NormalizedLocation(file="./src/service.py", start_line=48, end_line=48)],
+    )
+
+    evaluation = evaluate_deterministic(normalized, truth)
+
+    assert evaluation.detected is True
+    assert evaluation.location_matches is True

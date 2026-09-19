@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "BUG-001",
+      "report": {
+        "title": "Feature flag cache is stale",
+        "description": "A changed flag still returns the old value.",
+        "stepsToReproduce": ["Read the flag", "Change it", "Read it again"],
+        "expectedBehavior": "The changed value is returned.",
+        "actualBehavior": "The cached value is returned."
+      }
+    }
+  ]
+}

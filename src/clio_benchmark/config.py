@@ -33,12 +33,13 @@ class RuntimeConfig(StrictModel):
 
 
 class EvaluationWeights(StrictModel):
-    verdict: float = Field(default=20, ge=0)
-    root_cause: float = Field(default=35, ge=0)
-    code_location: float = Field(default=15, ge=0)
-    evidence_quality: float = Field(default=15, ge=0)
-    reproduction: float = Field(default=10, ge=0)
-    uncertainty: float = Field(default=5, ge=0)
+    recall: float = Field(default=25, ge=0)
+    precision: float = Field(default=20, ge=0)
+    location_accuracy: float = Field(default=10, ge=0)
+    root_cause_accuracy: float = Field(default=20, ge=0)
+    explanation_quality: float = Field(default=10, ge=0)
+    solution_validity: float = Field(default=10, ge=0)
+    execution_reliability: float = Field(default=5, ge=0)
 
     def as_dict(self) -> dict[str, float]:
         return {name: float(value) for name, value in self.model_dump().items()}

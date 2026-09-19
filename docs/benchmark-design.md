@@ -89,23 +89,40 @@ suites:
 
 ## 8. 벤치마크 저장소 계약
 
-각 테스트 저장소 루트의 `benchmark.json`에는 시스템 입력만 둔다. 정답과 버그 삽입 위치는 포함하지 않는다.
+각 테스트 저장소 루트에는 입력용 `cases.json`과 평가용 `bugs.json`을 분리해 둔다.
+
+- `cases.json`: Clio에 제출할 사용자 관점의 Bug Report
+- `bugs.json`: Benchmark Evaluator만 사용하는 Ground Truth
+
+두 파일은 같은 Case ID 집합을 가져야 하며 Clio 저장소 인덱싱 대상에서 모두 제외한다.
 
 ```json
 {
-  "schema_version": 1,
+  "schemaVersion": 1,
   "cases": [{
     "id": "BUG-001",
     "report": {"title": "세션이 사라진다", "description": "관찰된 증상",
-      "steps_to_reproduce": ["첫 단계"], "expected_behavior": "기대 동작",
-      "actual_behavior": "실제 동작", "reproduction_command": "pytest"}
+      "stepsToReproduce": ["첫 단계"], "expectedBehavior": "기대 동작",
+      "actualBehavior": "실제 동작", "reproductionCommand": "pytest"}
   }]
 }
 ```
 
-현재 계약은 `schema_version=1`, 고유한 `cases[].id`와 `report`의 제목·설명·재현 절차·기대 및 실제 동작을 요구한다.
+```json
+{
+  "schemaVersion": 1,
+  "bugs": [{
+    "id": "BUG-001",
+    "description": "세션 캐시가 무효화되지 않는다.",
+    "location": {"file": "src/session.py", "lines": [42, 58]},
+    "rootCause": "갱신 경로에서 캐시 무효화를 수행하지 않는다.",
+    "locationTolerance": 3,
+    "requiredConcepts": ["cache invalidation"]
+  }]
+}
+```
 
-채점용 oracle은 별도 저장소 또는 실행자 전용 경로에 둔다. 평가 대상 컨테이너에는 해당 경로를 mount하거나 API로 전달하지 않는다.
+평가 대상 Clio에는 두 메타데이터 파일을 mount하거나 API로 전달하지 않는다. Benchmark는 `bugs.json`을 읽지만 Clio에는 `cases.json`에서 생성한 Bug Report와 실제 소스 코드만 제공한다.
 
 ## 9. 사례 실행
 
@@ -113,11 +130,12 @@ suites:
 2. 고유한 `run_id`와 사례별 `case_id`를 생성한다.
 3. Server에 프로젝트를 생성하고 저장소를 등록한다.
 4. 저장소 동기화 완료를 기다린다.
-5. `benchmark.json`을 검증하고 리포트를 Server API로 등록한다.
-6. 반환된 작업 ID와 correlation ID를 저장한다.
-7. 모든 작업이 성공·실패·검토 필요 등 종료 상태가 될 때까지 polling한다.
-8. Server와 Agent에서 관련 기록을 수집한다.
-9. 기록과 oracle을 평가기에 전달하고 결과를 보존한다.
+5. `cases.json`과 `bugs.json`의 스키마 및 ID 대응을 검증한다.
+6. `cases.json`의 리포트를 Server API로 등록한다.
+7. 반환된 작업 ID와 correlation ID를 저장한다.
+8. 모든 작업이 성공·실패·검토 필요 등 종료 상태가 될 때까지 polling한다.
+9. Server와 Agent에서 관련 기록을 수집한다.
+10. 기록과 Ground Truth를 평가기에 전달하고 결과를 보존한다.
 
 초기 버전은 사례 간 영향을 막기 위해 순차 실행한다. 병렬 실행은 격리 기준이 정해진 뒤 도입한다.
 
@@ -185,7 +203,7 @@ runs/<run-id>/
 ## 15. 확인 필요 사항
 
 - Server·Agent API 경로, payload, 종료 상태와 timeout
-- 사례 데이터 초기화 범위와 `benchmark.json`의 최종 Bug API 필드
+- 사례 데이터 초기화 범위와 `cases.json`의 최종 Bug API 필드
 - oracle 저장 위치·권한과 결과·LLM 입력의 코드·로그 허용 범위
 - 점수 가중치, 품질 하한, LLM judge 운영 기준
 - 구현 언어, 패키징 방식 및 CI 환경

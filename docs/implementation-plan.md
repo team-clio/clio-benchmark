@@ -22,7 +22,7 @@ MVP에서는 정교한 점수, 병렬 실행, 대시보드를 다루지 않는�
 | Runtime | Agent·Server clone, Docker 실행, health check와 종료 |
 | Server 연동 | 프로젝트·저장소·버그 생성과 작업 상태 조회 |
 | Agent 연동 | trace, 모델, 토큰 및 도구 사용 기록 조회 |
-| Test Suite | `benchmark.json`, 테스트 저장소와 채점용 oracle 관리 |
+| Test Suite | `cases.json`, `bugs.json`, 테스트 저장소와 Ground Truth 격리 관리 |
 | Evaluation | 결정적 평가, LLM judge와 결과 집계 |
 
 Clio-Server와 Clio-Agent에 필요한 API 변경은 각 저장소에서 구현하되, 요청·응답 계약은 Clio Benchmark 문서에서 기준을 관리한다.
@@ -66,7 +66,7 @@ Clio-Server와 Clio-Agent에 필요한 API 변경은 각 저장소에서 구현�
 
 목표: 실제 리포트 하나를 Clio 처리 경로 끝까지 통과시킨다.
 
-- 테스트 저장소 clone과 `benchmark.json` 검증을 구현한다.
+- 테스트 저장소 clone과 `cases.json`/`bugs.json` 검증을 구현한다.
 - Server 프로젝트 생성, 저장소 등록과 동기화 대기를 구현한다.
 - 리포트 생성과 종료 상태 polling을 구현한다.
 - Server·Agent 원시 기록을 실행 디렉터리에 저장한다.
@@ -88,7 +88,7 @@ Clio-Server와 Clio-Agent에 필요한 API 변경은 각 저장소에서 구현�
 
 목표: 수집한 기록을 반복 가능한 점수와 비교 자료로 변환한다.
 
-- oracle 계약과 결정적 평가기를 먼저 구현한다.
+- Ground Truth 계약과 결정적 평가기를 먼저 구현한다.
 - 의미 평가가 필요한 항목에 한해 LLM judge를 추가한다.
 - 품질 점수와 토큰·시간·비용 지표를 분리해 집계한다.
 - 사례별 결과, `summary.json`, `report.md`를 생성한다.

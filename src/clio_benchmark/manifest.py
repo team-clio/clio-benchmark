@@ -13,6 +13,7 @@ class RunStatus(StrEnum):
     CREATED = "created"
     RUNNING = "running"
     COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
@@ -27,6 +28,8 @@ class RunManifest(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     config: dict[str, Any]
     case_count: int = Field(default=0, ge=0)
+    completed_case_count: int = Field(default=0, ge=0)
+    failed_case_count: int = Field(default=0, ge=0)
     error: str | None = None
 
     def transition(self, status: RunStatus, *, error: str | None = None) -> None:
