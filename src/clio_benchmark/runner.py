@@ -33,22 +33,6 @@ class BenchmarkRunner:
             prepared = self._suite_repository.prepare(
                 suite_config, self._workspace.suites / suite_config.name
             )
-            project = self._client.create_project(
-                name=f"benchmark-{manifest.run_id}-{suite_config.name}"[:120],
-                description=f"Clio Benchmark run {manifest.run_id}",
-            )
-            project_id = int(project["id"])
-            repository = self._client.register_repository(
-                project_id, str(suite_config.repository), suite_config.revision
-            )
-            synced_repository = self._client.wait_for_repository(
-                project_id,
-                int(repository["id"]),
-                timeout_seconds=self._config.runtime.startup_timeout_seconds,
-                poll_interval_seconds=self._config.runtime.poll_interval_seconds,
-            )
-            self._write_suite_metadata(manifest, prepared, project, synced_repository)
-
             cases_by_id = {case.id: case for case in prepared.benchmark.cases}
             unknown_ids = set(suite_config.case_ids) - set(cases_by_id)
             if unknown_ids:
@@ -61,6 +45,20 @@ class BenchmarkRunner:
                 else prepared.benchmark.cases
             )
             for case in selected_cases:
+                project = self._client.create_project(
+                    name=f"benchmark-{manifest.run_id}-{case.id}"[:120],
+                    description=f"Clio Benchmark {suite_config.name}: {case.id}",
+                )
+                project_id = int(project["id"])
+                repository = self._client.register_repository(
+                    project_id, str(suite_config.repository), suite_config.revision
+                )
+                synced_repository = self._client.wait_for_repository(
+                    project_id,
+                    int(repository["id"]),
+                    timeout_seconds=self._config.runtime.startup_timeout_seconds,
+                    poll_interval_seconds=self._config.runtime.poll_interval_seconds,
+                )
                 started_at = perf_counter()
                 bug = self._client.create_bug(project_id, case)
                 completed_bug = bug
@@ -108,28 +106,11 @@ class BenchmarkRunner:
                     workflow,
                     duration_seconds,
                     execution_error,
+                    project,
+                    synced_repository,
                 )
                 completed_cases += 1
         return completed_cases
-
-    def _write_suite_metadata(
-        self,
-        manifest: RunManifest,
-        suite: PreparedSuite,
-        project: dict[str, Any],
-        repository: dict[str, Any],
-    ) -> None:
-        self._workspace.write_run_artifact(
-            manifest.run_id,
-            Path("suites") / suite.config.name / "metadata.json",
-            {
-                "suite": suite.config.name,
-                "repository": str(suite.config.repository),
-                "commit_sha": suite.commit_sha,
-                "project": project,
-                "clio_repository": repository,
-            },
-        )
 
     def _write_case_result(
         self,
@@ -141,12 +122,17 @@ class BenchmarkRunner:
         workflow: dict[str, Any] | None,
         duration_seconds: float,
         execution_error: dict[str, str] | None,
+        project: dict[str, Any],
+        repository: dict[str, Any],
     ) -> None:
         self._workspace.write_run_artifact(
             manifest.run_id,
             Path("cases") / suite.config.name / str(case["id"]) / "result.json",
             {
                 "input": case,
+                "fixture_commit_sha": suite.commit_sha,
+                "project": project,
+                "clio_repository": repository,
                 "bug": bug,
                 "analysis": analysis,
                 "workflow": workflow,

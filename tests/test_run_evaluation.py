@@ -22,6 +22,7 @@ def test_evaluates_persisted_run_and_writes_reports(tmp_path: Path) -> None:
     result_path.write_text(
         json.dumps(
             {
+                "project": {"id": 1},
                 "bug": {"status": "TRIAGED"},
                 "analysis": {
                     "issueAnalysis": {
@@ -83,7 +84,12 @@ def test_rejects_run_from_a_different_agent_profile(tmp_path: Path) -> None:
     )
     result_path.parent.mkdir(parents=True)
     result_path.write_text(
-        json.dumps({"workflow": {"result_snapshot": {"analysis_profile": "one-shot"}}}),
+        json.dumps(
+            {
+                "project": {"id": 1},
+                "workflow": {"result_snapshot": {"analysis_profile": "one-shot"}},
+            }
+        ),
         encoding="utf-8",
     )
 

@@ -37,7 +37,7 @@ class ClioClient:
             "url": repository_url,
             "defaultBranch": revision,
             "includePaths": [],
-            "excludePaths": ["benchmark.json"],
+            "excludePaths": ["benchmark.json", "DATASET.md"],
             "enabled": True,
         }
         return self._request("POST", f"/api/v1/projects/{project_id}/repositories", payload)

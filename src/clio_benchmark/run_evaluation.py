@@ -19,6 +19,7 @@ def evaluate_run(
     config: BenchmarkConfig, workspace: Workspace, manifest: RunManifest
 ) -> dict[str, Any]:
     cases: list[dict[str, Any]] = []
+    project_ids: set[int] = set()
     for suite in config.suites:
         if suite.oracle is None:
             continue
@@ -42,6 +43,13 @@ def evaluate_run(
                 / "result.json"
             )
             result = _read_json(result_path)
+            project = result.get("project") or {}
+            project_id = project.get("id")
+            if not isinstance(project_id, int) or project_id in project_ids:
+                raise BenchmarkError(
+                    f"Benchmark case is not isolated in a unique project: {expected.id}"
+                )
+            project_ids.add(project_id)
             _verify_profile(result, config.experiment.profile)
             report = score_case(result, expected, config.evaluation)
             serialized = report_as_dict(report)

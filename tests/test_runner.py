@@ -9,8 +9,13 @@ from clio_benchmark.workspace import Workspace
 
 
 class FailingWorkflowClient:
+    def __init__(self):
+        self.project_ids = []
+
     def create_project(self, **kwargs):
-        return {"id": 1}
+        project_id = len(self.project_ids) + 1
+        self.project_ids.append(project_id)
+        return {"id": project_id}
 
     def register_repository(self, *args):
         return {"id": 2}
@@ -104,10 +109,11 @@ def test_runs_only_selected_cases(tmp_path: Path) -> None:
     )
     workspace = Workspace(tmp_path / ".benchmark")
     manifest = workspace.create_run(config)
+    client = FailingWorkflowClient()
     runner = BenchmarkRunner(
         config,
         workspace,
-        FailingWorkflowClient(),
+        client,
         StaticSuiteRepository(prepared),
     )
 
@@ -115,6 +121,45 @@ def test_runs_only_selected_cases(tmp_path: Path) -> None:
     case_root = workspace.runs / manifest.run_id / "cases/feature-flags"
     assert not (case_root / "case-1").exists()
     assert (case_root / "case-2/result.json").exists()
+    assert client.project_ids == [1]
+
+
+def test_creates_separate_project_for_each_case(tmp_path: Path) -> None:
+    config = load_config(Path("benchmark.example.yaml"))
+    cases = [
+        BenchmarkCase(
+            id=f"case-{number}",
+            report=BugReport(
+                title=f"title-{number}",
+                description="description",
+                steps_to_reproduce=["step"],
+                expected_behavior="expected",
+                actual_behavior="actual",
+            ),
+        )
+        for number in (1, 2)
+    ]
+    prepared = PreparedSuite(
+        config=config.suites[0],
+        path=tmp_path,
+        commit_sha="abc123",
+        benchmark=BenchmarkFile(schema_version=1, cases=cases),
+    )
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    client = FailingWorkflowClient()
+    runner = BenchmarkRunner(config, workspace, client, StaticSuiteRepository(prepared))
+
+    assert runner.execute(manifest) == 2
+    first = json.loads(
+        (workspace.runs / manifest.run_id / "cases/feature-flags/case-1/result.json")
+        .read_text(encoding="utf-8")
+    )
+    second = json.loads(
+        (workspace.runs / manifest.run_id / "cases/feature-flags/case-2/result.json")
+        .read_text(encoding="utf-8")
+    )
+    assert [first["project"]["id"], second["project"]["id"]] == [1, 2]
 
 
 def test_persists_timed_out_case_instead_of_stopping_run(tmp_path: Path) -> None:
