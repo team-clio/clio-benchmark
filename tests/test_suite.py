@@ -12,9 +12,11 @@ def test_loads_feature_flag_benchmark_contract() -> None:
     benchmark = load_benchmark_file(fixture)
 
     assert benchmark.schema_version == 1
-    assert [case.id for case in benchmark.cases] == [
-        "flag-value-changes-after-another-tenant-lookup"
-    ]
+    ids = [case.id for case in benchmark.cases]
+    assert len(ids) == 30
+    assert len(set(ids)) == 30
+    assert sum(case_id.startswith("cache-tenant-leak-") for case_id in ids) == 3
+    assert sum(case_id.startswith("repository-list-tenant-") for case_id in ids) == 3
     assert "재현 절차" in benchmark.cases[0].report.as_bug_description()
 
 
