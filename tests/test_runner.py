@@ -73,3 +73,40 @@ def test_keeps_case_result_when_workflow_metadata_is_unavailable(tmp_path: Path)
     assert result["analysis"]["issueAnalysis"]["status"] == "COMPLETED"
     assert result["workflow"]["verification_status"] == "unavailable"
     assert "temporarily unavailable" in result["workflow"]["verification_error"]
+
+
+def test_runs_only_selected_cases(tmp_path: Path) -> None:
+    config = load_config(Path("benchmark.example.yaml"))
+    config.suites[0].case_ids = ["case-2"]
+    cases = [
+        BenchmarkCase(
+            id=f"case-{number}",
+            report=BugReport(
+                title=f"title-{number}",
+                description="description",
+                steps_to_reproduce=["step"],
+                expected_behavior="expected",
+                actual_behavior="actual",
+            ),
+        )
+        for number in (1, 2)
+    ]
+    prepared = PreparedSuite(
+        config=config.suites[0],
+        path=tmp_path,
+        commit_sha="abc123",
+        benchmark=BenchmarkFile(schema_version=1, cases=cases),
+    )
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    runner = BenchmarkRunner(
+        config,
+        workspace,
+        FailingWorkflowClient(),
+        StaticSuiteRepository(prepared),
+    )
+
+    assert runner.execute(manifest) == 1
+    case_root = workspace.runs / manifest.run_id / "cases/feature-flags"
+    assert not (case_root / "case-1").exists()
+    assert (case_root / "case-2/result.json").exists()

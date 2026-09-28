@@ -23,7 +23,16 @@ def evaluate_run(
         if suite.oracle is None:
             continue
         oracle = load_oracle(suite.oracle)
-        for expected in oracle.cases:
+        oracle_by_id = {case.id: case for case in oracle.cases}
+        unknown_ids = set(suite.case_ids) - set(oracle_by_id)
+        if unknown_ids:
+            raise BenchmarkError(f"Unknown oracle case_ids: {sorted(unknown_ids)}")
+        selected_oracles = (
+            [oracle_by_id[case_id] for case_id in suite.case_ids]
+            if suite.case_ids
+            else oracle.cases
+        )
+        for expected in selected_oracles:
             result_path = (
                 workspace.runs
                 / manifest.run_id

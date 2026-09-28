@@ -49,7 +49,18 @@ class BenchmarkRunner:
             )
             self._write_suite_metadata(manifest, prepared, project, synced_repository)
 
-            for case in prepared.benchmark.cases:
+            cases_by_id = {case.id: case for case in prepared.benchmark.cases}
+            unknown_ids = set(suite_config.case_ids) - set(cases_by_id)
+            if unknown_ids:
+                raise ClioApiError(
+                    f"Unknown benchmark case_ids: {sorted(unknown_ids)}"
+                )
+            selected_cases = (
+                [cases_by_id[case_id] for case_id in suite_config.case_ids]
+                if suite_config.case_ids
+                else prepared.benchmark.cases
+            )
+            for case in selected_cases:
                 started_at = perf_counter()
                 bug = self._client.create_bug(project_id, case)
                 completed_bug = self._client.wait_for_bug(

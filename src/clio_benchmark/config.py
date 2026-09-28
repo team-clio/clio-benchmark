@@ -6,7 +6,16 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, ValidationError
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    SecretStr,
+    ValidationError,
+    model_validator,
+)
 
 from clio_benchmark.errors import ConfigurationError
 
@@ -64,6 +73,13 @@ class SuiteConfig(StrictModel):
     repository: HttpUrl
     revision: str = Field(default="main", min_length=1)
     oracle: Path | None = None
+    case_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def case_ids_are_unique(self) -> SuiteConfig:
+        if len(self.case_ids) != len(set(self.case_ids)):
+            raise ValueError("suite case_ids must be unique")
+        return self
 
 
 class ExperimentConfig(StrictModel):
@@ -114,6 +130,7 @@ class BenchmarkConfig(StrictModel):
                     "repository": str(suite.repository),
                     "revision": suite.revision,
                     "oracle": str(suite.oracle) if suite.oracle else None,
+                    "case_ids": suite.case_ids,
                 }
                 for suite in self.suites
             ],
