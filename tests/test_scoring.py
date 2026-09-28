@@ -1,12 +1,20 @@
 from pathlib import Path
 
+import pytest
+
 from clio_benchmark.config import EvaluationConfig
 from clio_benchmark.oracle import load_oracle
 from clio_benchmark.scoring import score_case
 
+PRIVATE_ORACLE = Path("oracles/feature-flags.json")
+
+pytestmark = pytest.mark.skipif(
+    not PRIVATE_ORACLE.exists(), reason="private oracle is not distributed with the repository"
+)
+
 
 def test_scores_expected_root_cause_location_and_evidence() -> None:
-    oracle = load_oracle(Path("oracles/feature-flags.json")).cases[0]
+    oracle = load_oracle(PRIVATE_ORACLE).cases[0]
     result = {
         "bug": {"status": "TRIAGED"},
         "analysis": {
@@ -54,7 +62,7 @@ def test_scores_expected_root_cause_location_and_evidence() -> None:
 
 
 def test_missing_root_cause_does_not_receive_full_score() -> None:
-    oracle = load_oracle(Path("oracles/feature-flags.json")).cases[0]
+    oracle = load_oracle(PRIVATE_ORACLE).cases[0]
     result = {
         "bug": {"status": "TRIAGED"},
         "analysis": {

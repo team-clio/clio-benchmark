@@ -8,6 +8,11 @@ from clio_benchmark.errors import BenchmarkError
 from clio_benchmark.run_evaluation import evaluate_run, render_comparison
 from clio_benchmark.workspace import Workspace
 
+pytestmark = pytest.mark.skipif(
+    not Path("oracles/feature-flags.json").exists(),
+    reason="private oracle is not distributed with the repository",
+)
+
 
 def test_evaluates_persisted_run_and_writes_reports(tmp_path: Path) -> None:
     config = load_config(Path("benchmark.example.yaml"))
