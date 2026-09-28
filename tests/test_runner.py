@@ -39,6 +39,11 @@ class StaticSuiteRepository:
         return self.suite
 
 
+class TimedOutBugClient(FailingWorkflowClient):
+    def wait_for_bug(self, *args, **kwargs):
+        raise ClioApiError("Bug processing timed out: 3 (last_status=ANALYZING)")
+
+
 def test_keeps_case_result_when_workflow_metadata_is_unavailable(tmp_path: Path) -> None:
     config = load_config(Path("benchmark.example.yaml"))
     case = BenchmarkCase(
@@ -110,3 +115,39 @@ def test_runs_only_selected_cases(tmp_path: Path) -> None:
     case_root = workspace.runs / manifest.run_id / "cases/feature-flags"
     assert not (case_root / "case-1").exists()
     assert (case_root / "case-2/result.json").exists()
+
+
+def test_persists_timed_out_case_instead_of_stopping_run(tmp_path: Path) -> None:
+    config = load_config(Path("benchmark.example.yaml"))
+    case = BenchmarkCase(
+        id="case-timeout",
+        report=BugReport(
+            title="title",
+            description="description",
+            steps_to_reproduce=["step"],
+            expected_behavior="expected",
+            actual_behavior="actual",
+        ),
+    )
+    prepared = PreparedSuite(
+        config=config.suites[0],
+        path=tmp_path,
+        commit_sha="abc123",
+        benchmark=BenchmarkFile(schema_version=1, cases=[case]),
+    )
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    runner = BenchmarkRunner(
+        config,
+        workspace,
+        TimedOutBugClient(),
+        StaticSuiteRepository(prepared),
+    )
+
+    assert runner.execute(manifest) == 1
+    result_path = workspace.runs / manifest.run_id / "cases/feature-flags/case-timeout/result.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+
+    assert result["analysis"] is None
+    assert result["execution_error"]["type"] == "ClioApiError"
+    assert "last_status=ANALYZING" in result["execution_error"]["message"]

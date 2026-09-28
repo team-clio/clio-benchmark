@@ -63,31 +63,41 @@ class BenchmarkRunner:
             for case in selected_cases:
                 started_at = perf_counter()
                 bug = self._client.create_bug(project_id, case)
-                completed_bug = self._client.wait_for_bug(
-                    project_id,
-                    int(bug["id"]),
-                    timeout_seconds=self._config.runtime.case_timeout_seconds,
-                    poll_interval_seconds=self._config.runtime.poll_interval_seconds,
-                )
-                issue_id = completed_bug.get("issue_id")
+                completed_bug = bug
                 analysis = None
                 workflow = None
-                if issue_id is not None:
-                    analysis = self._client.wait_for_analysis(
+                execution_error = None
+                try:
+                    completed_bug = self._client.wait_for_bug(
                         project_id,
-                        int(issue_id),
+                        int(bug["id"]),
                         timeout_seconds=self._config.runtime.case_timeout_seconds,
                         poll_interval_seconds=self._config.runtime.poll_interval_seconds,
                     )
-                    workflow_run_id = analysis.get("workflowRunId")
-                    if workflow_run_id is not None:
-                        try:
-                            workflow = self._client.get_workflow(project_id, int(workflow_run_id))
-                        except ClioApiError as exc:
-                            workflow = {
-                                "verification_status": "unavailable",
-                                "verification_error": str(exc),
-                            }
+                    issue_id = completed_bug.get("issue_id")
+                    if issue_id is not None:
+                        analysis = self._client.wait_for_analysis(
+                            project_id,
+                            int(issue_id),
+                            timeout_seconds=self._config.runtime.case_timeout_seconds,
+                            poll_interval_seconds=self._config.runtime.poll_interval_seconds,
+                        )
+                        workflow_run_id = analysis.get("workflowRunId")
+                        if workflow_run_id is not None:
+                            try:
+                                workflow = self._client.get_workflow(
+                                    project_id, int(workflow_run_id)
+                                )
+                            except ClioApiError as exc:
+                                workflow = {
+                                    "verification_status": "unavailable",
+                                    "verification_error": str(exc),
+                                }
+                except ClioApiError as exc:
+                    execution_error = {
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                    }
                 duration_seconds = round(perf_counter() - started_at, 3)
                 self._write_case_result(
                     manifest,
@@ -97,6 +107,7 @@ class BenchmarkRunner:
                     analysis,
                     workflow,
                     duration_seconds,
+                    execution_error,
                 )
                 completed_cases += 1
         return completed_cases
@@ -129,6 +140,7 @@ class BenchmarkRunner:
         analysis: dict[str, Any] | None,
         workflow: dict[str, Any] | None,
         duration_seconds: float,
+        execution_error: dict[str, str] | None,
     ) -> None:
         self._workspace.write_run_artifact(
             manifest.run_id,
@@ -138,6 +150,7 @@ class BenchmarkRunner:
                 "bug": bug,
                 "analysis": analysis,
                 "workflow": workflow,
+                "execution_error": execution_error,
                 "efficiency": {"duration_seconds": duration_seconds},
             },
         )

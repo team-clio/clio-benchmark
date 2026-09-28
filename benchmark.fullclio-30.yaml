@@ -1,0 +1,43 @@
+schema_version: 1
+
+clio:
+  agent:
+    repository: https://github.com/team-clio/clio-agent-graph.git
+    revision: 074b8851be04a05c90a6a2f3b94b8e7801f0bd49
+  server:
+    repository: https://github.com/team-clio/clio-server.git
+    revision: 8d88a73f02dffaf581c01fe69b2044fcc1e93ebb
+
+runtime:
+  server_url: http://127.0.0.1:8080
+  startup_timeout_seconds: 300
+  case_timeout_seconds: 90
+  poll_interval_seconds: 2
+
+evaluation:
+  pass_threshold: 70
+  weights:
+    verdict: 20
+    root_cause: 35
+    code_location: 15
+    evidence_quality: 15
+    reproduction: 10
+    uncertainty: 5
+
+experiment:
+  profile: full-clio
+  repetition: 1
+
+environment:
+  agent: {}
+  server: {}
+
+secrets:
+  agent: {}
+  server: {}
+
+suites:
+  - name: feature-flags-30
+    repository: https://github.com/team-clio/clio-benchmark-fixture-feature-flags.git
+    revision: task/benchmark-30-cases
+    oracle: oracles/feature-flags-30.json

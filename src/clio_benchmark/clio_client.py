@@ -89,15 +89,21 @@ class ClioClient:
         poll_interval_seconds: float,
     ) -> dict[str, Any]:
         deadline = time.monotonic() + timeout_seconds
+        last_bug: dict[str, Any] | None = None
         while time.monotonic() < deadline:
             response = self._request("GET", f"/external-api/v1/projects/{project_id}/bugs?size=100")
             bug = next(
                 (item for item in response.get("items", []) if item.get("id") == bug_id), None
             )
+            if bug is not None:
+                last_bug = bug
             if bug is not None and bug.get("status") in {"TRIAGED", "RESOLVED", "IGNORED"}:
                 return bug
             time.sleep(poll_interval_seconds)
-        raise ClioApiError(f"Bug processing timed out: {bug_id}")
+        last_status = last_bug.get("status") if last_bug is not None else "not_found"
+        raise ClioApiError(
+            f"Bug processing timed out: {bug_id} (last_status={last_status})"
+        )
 
     def wait_for_analysis(
         self,

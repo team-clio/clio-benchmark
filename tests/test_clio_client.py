@@ -1,6 +1,8 @@
 import httpx
+import pytest
 
 from clio_benchmark.clio_client import ClioClient
+from clio_benchmark.errors import ClioApiError
 
 
 def test_wait_for_analysis_retries_empty_success_response() -> None:
@@ -43,4 +45,19 @@ def test_reads_workflow_result_snapshot() -> None:
     result = client.get_workflow(1, 7)
 
     assert result["result_snapshot"]["analysis_profile"] == "full-clio"
+    client.close()
+
+
+def test_bug_timeout_reports_last_observed_status() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"items": [{"id": 3, "status": "ANALYZING"}]})
+
+    client = ClioClient("http://clio.test")
+    client._client.close()
+    client._client = httpx.Client(
+        base_url="http://clio.test", transport=httpx.MockTransport(handler)
+    )
+
+    with pytest.raises(ClioApiError, match="last_status=ANALYZING"):
+        client.wait_for_bug(1, 3, timeout_seconds=0.001, poll_interval_seconds=0.001)
     client.close()
