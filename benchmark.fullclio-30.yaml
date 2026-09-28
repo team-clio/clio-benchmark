@@ -11,7 +11,7 @@ clio:
 runtime:
   server_url: http://127.0.0.1:8080
   startup_timeout_seconds: 300
-  case_timeout_seconds: 90
+  case_timeout_seconds: 300
   poll_interval_seconds: 2
 
 evaluation:
