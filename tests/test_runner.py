@@ -101,9 +101,7 @@ def test_runner_keeps_running_after_case_failure_and_writes_report(tmp_path: Pat
         path=tmp_path / "suite",
         commit_sha="abc123",
         cases=CasesFile(schemaVersion=1, cases=[_case("BUG-FAIL"), _case("BUG-OK")]),
-        ground_truth=BugsFile(
-            schemaVersion=1, bugs=[_truth("BUG-FAIL"), _truth("BUG-OK")]
-        ),
+        ground_truth=BugsFile(schemaVersion=1, bugs=[_truth("BUG-FAIL"), _truth("BUG-OK")]),
     )
     workspace = Workspace(tmp_path / ".benchmark")
     manifest = workspace.create_run(config)
@@ -122,14 +120,13 @@ def test_runner_keeps_running_after_case_failure_and_writes_report(tmp_path: Pat
     assert summary.location_matches == 1
     run_dir = workspace.runs / manifest.run_id
     assert (run_dir / "cases/feature-flags/BUG-OK/evaluation.json").exists()
-    failed_metrics = json.loads(
-        (run_dir / "cases/feature-flags/BUG-FAIL/metrics.json").read_text()
-    )
+    failed_metrics = json.loads((run_dir / "cases/feature-flags/BUG-FAIL/metrics.json").read_text())
     assert failed_metrics["status"] == "infra_error"
     assert (run_dir / "summary.json").exists()
-    evaluation = json.loads(
-        (run_dir / "cases/feature-flags/BUG-OK/evaluation.json").read_text()
-    )
+    assert (run_dir / "suites/feature-flags/ground-truth.json").exists()
+    assert (run_dir / "suites/feature-flags/cases.json").exists()
+    assert (run_dir / "cases/feature-flags/BUG-OK/normalized-result.json").exists()
+    evaluation = json.loads((run_dir / "cases/feature-flags/BUG-OK/evaluation.json").read_text())
     assert evaluation["llmJudge"]["status"] == "disabled"
     assert "pending score aggregation" in (run_dir / "report.md").read_text()
 
@@ -159,8 +156,9 @@ def test_runner_persists_structured_llm_judge_result(tmp_path: Path) -> None:
     summary = runner.execute(manifest)
 
     evaluation = json.loads(
-        (workspace.runs / manifest.run_id / "cases/feature-flags/BUG-OK/evaluation.json")
-        .read_text()
+        (
+            workspace.runs / manifest.run_id / "cases/feature-flags/BUG-OK/evaluation.json"
+        ).read_text()
     )
     assert summary.llm_evaluated_cases == 1
     assert evaluation["llmJudge"]["status"] == "completed"
@@ -193,9 +191,7 @@ def test_runner_isolates_llm_judge_failure(tmp_path: Path) -> None:
     summary = runner.execute(manifest)
 
     run_dir = workspace.runs / manifest.run_id
-    evaluation = json.loads(
-        (run_dir / "cases/feature-flags/BUG-OK/evaluation.json").read_text()
-    )
+    evaluation = json.loads((run_dir / "cases/feature-flags/BUG-OK/evaluation.json").read_text())
     metrics = json.loads((run_dir / "cases/feature-flags/BUG-OK/metrics.json").read_text())
     assert summary.llm_failed_cases == 1
     assert evaluation["llmJudge"]["status"] == "failed"
