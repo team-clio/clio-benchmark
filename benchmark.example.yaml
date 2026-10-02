@@ -10,6 +10,8 @@ clio:
 
 runtime:
   server_url: http://localhost:8080
+  agent_url: http://localhost:2024
+  tool_log_timeout_seconds: 30
   startup_timeout_seconds: 300
   case_timeout_seconds: 1800
   poll_interval_seconds: 5

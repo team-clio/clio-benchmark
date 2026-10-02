@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 
+from clio_benchmark.agent_client import AgentLogClient, LogCollectionError
 from clio_benchmark.clio_client import ClioClient
 from clio_benchmark.config import BenchmarkConfig, load_config
 from clio_benchmark.errors import BenchmarkError
@@ -43,6 +44,7 @@ def run(
     local_workspace = Workspace(workspace)
     manifest = local_workspace.create_run(benchmark_config)
     if not benchmark_config.suites:
+        manifest.tool_log_status = "skipped"
         manifest.transition(RunStatus.COMPLETED)
         local_workspace.save_manifest(manifest)
         typer.echo(f"Run {manifest.run_id} completed: no suites configured")
@@ -51,7 +53,15 @@ def run(
     manifest.transition(RunStatus.RUNNING)
     local_workspace.save_manifest(manifest)
     client = ClioClient(str(benchmark_config.runtime.server_url))
+    agent = AgentLogClient(
+        str(benchmark_config.runtime.agent_url),
+        benchmark_config.runtime.tool_log_timeout_seconds,
+    )
+    start = None
     try:
+        start = agent.boundary()
+        manifest.execution_started_at = start.at
+        local_workspace.save_manifest(manifest)
         summary = BenchmarkRunner(benchmark_config, local_workspace, client).execute(manifest)
         manifest.case_count = summary.total_cases
         manifest.completed_case_count = summary.completed_cases
@@ -66,12 +76,29 @@ def run(
         local_workspace.save_manifest(manifest)
         typer.echo(f"Run {manifest.run_id} failed: {manifest.error}", err=True)
         raise typer.Exit(code=2) from exc
+    except Exception as exc:
+        manifest.transition(RunStatus.FAILED, error=str(exc))
+        local_workspace.save_manifest(manifest)
+        typer.echo(f"Run {manifest.run_id} failed: {manifest.error}", err=True)
+        raise typer.Exit(code=2) from exc
     finally:
+        if start is not None:
+            try:
+                agent.collect(manifest, local_workspace, start)
+            except LogCollectionError as exc:
+                typer.echo(str(exc), err=True)
+        else:
+            manifest.tool_log_status = "failed"
+            manifest.tool_log_error = manifest.error
+            local_workspace.save_manifest(manifest)
+        agent.close()
         client.close()
+    if manifest.tool_log_status == "failed":
+        manifest.transition(RunStatus.COMPLETED_WITH_ERRORS, error=manifest.tool_log_error)
+        local_workspace.save_manifest(manifest)
+        raise typer.Exit(code=2)
     final_status = (
-        RunStatus.COMPLETED_WITH_ERRORS
-        if manifest.failed_case_count
-        else RunStatus.COMPLETED
+        RunStatus.COMPLETED_WITH_ERRORS if manifest.failed_case_count else RunStatus.COMPLETED
     )
     manifest.transition(final_status)
     local_workspace.save_manifest(manifest)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -30,6 +30,10 @@ class RunManifest(BaseModel):
     case_count: int = Field(default=0, ge=0)
     completed_case_count: int = Field(default=0, ge=0)
     failed_case_count: int = Field(default=0, ge=0)
+    execution_started_at: str | None = None
+    execution_finished_at: str | None = None
+    tool_log_status: Literal["pending", "skipped", "collecting", "completed", "failed"] = "pending"
+    tool_log_error: str | None = None
     error: str | None = None
 
     def transition(self, status: RunStatus, *, error: str | None = None) -> None:

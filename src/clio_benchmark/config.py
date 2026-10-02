@@ -27,6 +27,8 @@ class ClioConfig(StrictModel):
 
 class RuntimeConfig(StrictModel):
     server_url: AnyHttpUrl = "http://localhost:8080"
+    agent_url: AnyHttpUrl = "http://localhost:2024"
+    tool_log_timeout_seconds: float = Field(default=30, gt=0)
     startup_timeout_seconds: int = Field(default=300, gt=0)
     case_timeout_seconds: int = Field(default=1800, gt=0)
     poll_interval_seconds: float = Field(default=5, gt=0)

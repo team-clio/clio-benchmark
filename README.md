@@ -155,6 +155,29 @@ export CUSTOM_LLM_API_KEY="your-api-key"
     └── metrics.json
 ```
 
+## 벤치마크 Tool 로그
+
+Agent Graph는 벤치마크 모드로 실행해야 합니다.
+
+```shell
+CLIO_BENCHMARK_MODE=true uv run langgraph dev
+```
+
+`runtime.agent_url`은 기본 `http://localhost:2024`이며,
+`runtime.tool_log_timeout_seconds`는 로그 API 요청별 timeout(기본 30초)입니다.
+Benchmark는 Agent를 자동 실행하지 않습니다. 실행 전에 로그 API를 확인하며, 벤치마크
+모드가 꺼져 있거나 접속할 수 없으면 case를 제출하지 않고 실패합니다.
+
+종료 후 `.benchmark/runs/<run-id>/tool-calls.jsonl`에 Tool 이름·인자·반환값·오류·시간을
+저장합니다. `tool-call-collection.json`과 manifest에는 수집 상태와 기간을 기록합니다.
+호출 ID는 callback 실행 ID이며, ToolMessage의 모델 호출 ID는 반환값에 보존됩니다.
+
+수집 대상은 시작·종료 경계 사이 해당 Agent에서 시작된 모든 Tool 호출입니다.
+동시에 처리한 다른 요청도 포함되므로 벤치마크에는 전용 Agent를 사용합니다.
+취소·실패 종료에서도 수집을 시도하며, 미완료 호출은 `running`으로 표시합니다.
+수집 오류는 부분 로그와 함께 기록합니다. 정상 실행에서 수집만 실패하면 CLI는 2로
+종료하며, 기존 실행 오류·취소의 상태와 종료 코드는 유지합니다. 빈 suite는 수집을 건너뜁니다.
+
 ## 문서
 
 - [벤치마크 설계](docs/benchmark-design.md)
