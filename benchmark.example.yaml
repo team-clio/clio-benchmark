@@ -42,6 +42,19 @@ environment:
   agent: {}
   server: {}
 
+# HTML은 실행 종료 후 자동 생성한다. LLM 서술은 Judge 설정을 기본값으로 재사용한다.
+reporting:
+  enabled: true
+  llm:
+    enabled: true
+    # 필요할 때만 provider, model, api_key_env, base_url 등을 덮어쓴다.
+    # provider: openai
+    # model: gpt-4.1
+    # api_key_env: REPORT_API_KEY
+    prompt_version: report-v1
+    max_input_chars: 60000
+    max_case_chars: 4000
+
 # 실제 키는 git에 포함되지 않는 benchmark.local.yaml에 입력한다.
 secrets:
   agent: {}

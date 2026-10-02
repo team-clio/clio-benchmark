@@ -13,6 +13,7 @@
 - 결정적 Bug 탐지·코드 위치 평가
 - Case별 오류 격리와 부분 실패 실행
 - 실행 요약과 Markdown report 생성
+- 종료 후 심플한 HTML report와 근거가 연결된 LLM 서술 생성
 - LangChain 기반 LLM Judge 구조화 평가
 - 품질 점수 골격과 별도 효율성 지표
 
@@ -182,6 +183,11 @@ Benchmark는 Agent를 자동 실행하지 않습니다. 실행 전에 로그 API
 
 - [벤치마크 설계](docs/benchmark-design.md)
 - [구현 계획](docs/implementation-plan.md)
+- [HTML 보고서: 설정·지표·재생성](docs/html-report.md)
+
+HTML은 기본 자동 생성합니다. 보고서 LLM은 Judge 모델·키 설정을 재사용하며, Judge 비활성 상태에서도
+별도 호출합니다. 키가 없거나 호출이 실패해도 수치·표 HTML을 남깁니다. `report --format html`로
+경로를 확인하고 `report --format html --regenerate`로 저장된 실행에서 재생성합니다.
 
 ## 문서 상태
 
