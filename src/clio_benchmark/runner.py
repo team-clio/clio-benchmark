@@ -67,6 +67,25 @@ class BenchmarkRunner:
             prepared = self._suite_repository.prepare(
                 suite_config, self._workspace.suites / suite_config.name
             )
+            # 서비스 준비가 실패해도 실행 당시 입력·정답·예정 사례를 보존한다.
+            suite_path = Path("suites") / suite_config.name
+            self._workspace.write_run_artifact(
+                manifest.run_id, suite_path / "cases.json", prepared.cases.model_dump(mode="json")
+            )
+            self._workspace.write_run_artifact(
+                manifest.run_id,
+                suite_path / "ground-truth.json",
+                prepared.ground_truth.model_dump(mode="json"),
+            )
+            self._workspace.write_run_artifact(
+                manifest.run_id,
+                suite_path / "metadata.json",
+                {
+                    "suite": suite_config.name,
+                    "repository": str(suite_config.repository),
+                    "commit_sha": prepared.commit_sha,
+                },
+            )
             project = self._client.create_project(
                 name=f"benchmark-{manifest.run_id}-{suite_config.name}"[:120],
                 description=f"Clio Benchmark run {manifest.run_id}",
@@ -166,6 +185,9 @@ class BenchmarkRunner:
 
             raw_result = {"bug": completed_bug, "analysis": analysis}
             normalized = normalize_clio_result(raw_result)
+            self._workspace.write_run_artifact(
+                manifest.run_id, case_path / "normalized-result.json", normalized.model_dump()
+            )
             ground_truth = suite.truth_for(case.id)
             evaluation = evaluate_deterministic(normalized, ground_truth)
             try:

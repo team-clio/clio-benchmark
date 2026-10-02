@@ -66,6 +66,35 @@ class EvaluationConfig(StrictModel):
     llm_judge: LLMJudgeConfig = Field(default_factory=LLMJudgeConfig)
 
 
+class ReportLLMConfig(StrictModel):
+    enabled: bool = True
+    provider: Literal["openai", "deepseek"] | None = None
+    model: str | None = Field(default=None, min_length=1)
+    api_key_env: str | None = Field(default=None, min_length=1)
+    base_url: AnyHttpUrl | None = None
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    timeout_seconds: float | None = Field(default=None, gt=0)
+    max_retries: int | None = Field(default=None, ge=0)
+    prompt_version: str = Field(default="report-v1", min_length=1)
+    max_input_chars: int = Field(default=60_000, ge=4000)
+    max_case_chars: int = Field(default=4000, ge=500)
+
+    def resolve(self, judge: LLMJudgeConfig) -> LLMJudgeConfig:
+        values = judge.model_dump()
+        if self.provider is not None and self.provider != judge.provider:
+            # Provider가 바뀌면 이전 provider의 모델·키·endpoint는 상속하지 않는다.
+            values.update(model=None, api_key_env=None, base_url=None)
+        overrides = self.model_dump(
+            exclude_none=True, exclude={"max_input_chars", "max_case_chars"}
+        )
+        return LLMJudgeConfig.model_validate({**values, **overrides})
+
+
+class ReportingConfig(StrictModel):
+    enabled: bool = True
+    llm: ReportLLMConfig = Field(default_factory=ReportLLMConfig)
+
+
 class ServiceValues(StrictModel):
     agent: dict[str, str] = Field(default_factory=dict)
     server: dict[str, str] = Field(default_factory=dict)
@@ -87,6 +116,7 @@ class BenchmarkConfig(StrictModel):
     clio: ClioConfig
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+    reporting: ReportingConfig = Field(default_factory=ReportingConfig)
     environment: ServiceValues = Field(default_factory=ServiceValues)
     secrets: ServiceSecrets = Field(default_factory=ServiceSecrets)
     suites: list[SuiteConfig] = Field(default_factory=list)
@@ -101,6 +131,7 @@ class BenchmarkConfig(StrictModel):
             },
             "runtime": self.runtime.model_dump(mode="json"),
             "evaluation": self.evaluation.model_dump(mode="json"),
+            "reporting": self.reporting.model_dump(mode="json"),
             "environment": self.environment.model_dump(mode="json"),
             "secret_names": {
                 "agent": sorted(self.secrets.agent),
