@@ -1,3 +1,5 @@
 {
-  "task/html-benchmark-report": "off"
+  "task/html-benchmark-report": "off",
+  "main": "off",
+  "task/benchmark-runtime-fixes": "off"
 }
