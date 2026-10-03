@@ -196,3 +196,45 @@ def test_runner_isolates_llm_judge_failure(tmp_path: Path) -> None:
     assert summary.llm_failed_cases == 1
     assert evaluation["llmJudge"]["status"] == "failed"
     assert metrics["status"] == "evaluation_failed"
+
+
+def test_runner_isolates_case_projects_and_evaluates_review_outcomes(tmp_path: Path) -> None:
+    class ReviewClient(FakeClient):
+        def __init__(self) -> None:
+            self.projects = []
+            self.submitted = []
+
+        def create_project(self, name: str, description: str) -> dict:
+            self.projects.append(name)
+            return {"id": len(self.projects), "name": name}
+
+        def create_bug(self, project_id: int, case: BenchmarkCase) -> dict:
+            self.submitted.append(project_id)
+            return {"id": project_id}
+
+        def wait_for_bug(self, *args, **kwargs) -> dict:
+            return {"id": 1, "issue_id": None, "status": "TRIAGED"}
+
+        def wait_for_analysis(self, *args, **kwargs) -> dict:
+            raise AssertionError("A review outcome has no issue analysis")
+
+    config = load_config(Path("benchmark.example.yaml"))
+    suite_config = config.suites[0]
+    prepared = PreparedSuite(
+        config=suite_config,
+        path=tmp_path,
+        commit_sha="abc123",
+        cases=CasesFile(schemaVersion=1, cases=[_case("REVIEW-1"), _case("REVIEW-2")]),
+        ground_truth=BugsFile(schemaVersion=1, bugs=[_truth("REVIEW-1"), _truth("REVIEW-2")]),
+    )
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    client = ReviewClient()
+    summary = BenchmarkRunner(
+        config, workspace, client, FakeSuiteRepository(prepared), FakeJudge()
+    ).execute(manifest)
+    assert client.submitted == [1, 2]
+    assert len(set(client.projects)) == 2
+    assert summary.completed_cases == 2
+    assert summary.detected_cases == 0
+    assert summary.llm_evaluated_cases == 2
