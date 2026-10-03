@@ -97,6 +97,13 @@ detected는 탐지 신호이며 원인 정답을 보장하지 않는다. 위치 
 종합 점수·Precision·F1·비용·토큰·재현 성공률은 미집계/미수집이므로 만들어내지 않는다.
 소요 시간은 Judge를 포함한다. 비교 실행이 없으므로 개선/악화 추세를 주장하지 않는다.
 숫자는 필요할 때만 정확히 인용하고 각 항목을 간결한 평문으로 작성한다."""
+        prompt += (
+            "\n출력 필드 이름은 다음 JSON Schema를 정확히 따른다. 값은 한국어로 작성한다."
+            "run_id, quality_interpretation, evidence_ids는 출력 필드에 포함하지 않는다."
+            "quality_analysis, evidence를 사용한다. recommendations에는 action, "
+            "observation, verification, evidence 필드가 모두 필요하다.\n"
+            + json.dumps(ReportNarrative.model_json_schema(), ensure_ascii=False)
+        )
         result = self._model.invoke(
             [
                 SystemMessage(content=prompt),
