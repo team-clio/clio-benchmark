@@ -67,3 +67,21 @@ def test_deterministic_evaluation_applies_location_tolerance() -> None:
 
     assert evaluation.detected is True
     assert evaluation.location_matches is True
+
+
+def test_normalizes_real_issue_analysis_without_using_bug_description() -> None:
+    from clio_benchmark.result import normalize_clio_result
+    result = normalize_clio_result({
+        "bug": {"title": "Reported symptom"},
+        "analysis": {"issueAnalysis": {
+            "hypotheses": [{"hypothesis": "Actual root cause", "confidence": 0.9}],
+            "findings": [{"fact": "Verified fact"}],
+            "evidence": [{"location": "src/service.py:10-12", "observation": "Code evidence"}],
+            "resolution_plan": {"steps": [{"description": "Fix cache key"}]},
+        }},
+    })
+    assert result.detected
+    assert result.root_cause == "Actual root cause"
+    assert result.locations[0].start_line == 10
+    assert result.solution == "Fix cache key"
+    assert not normalize_clio_result({"bug": {"title": "Symptom"}, "analysis": {}}).detected

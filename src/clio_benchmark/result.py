@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import Any
 
@@ -50,6 +51,12 @@ def normalize_clio_result(payload: dict[str, Any] | None) -> NormalizedResult:
     if not payload:
         return NormalizedResult(detected=False)
 
+    if "analysis" in payload and not payload["analysis"]:
+        return NormalizedResult(detected=False)
+    analysis = payload.get("analysis", payload)
+    if isinstance(analysis, dict) and isinstance(analysis.get("issueAnalysis"), dict):
+        return _normalize_issue_analysis(analysis["issueAnalysis"])
+
     verdict = _first(payload, "detected", "isBug", "is_bug", "verdict", "bugDetected")
     detected = _as_detected(verdict)
     root_cause = _as_text(_first(payload, "rootCause", "root_cause", "cause"))
@@ -68,6 +75,42 @@ def normalize_clio_result(payload: dict[str, Any] | None) -> NormalizedResult:
         explanation=explanation,
         solution=solution,
         evidence=_as_text_list(evidence_value),
+        locations=locations,
+    )
+
+
+def _normalize_issue_analysis(analysis: dict[str, Any]) -> NormalizedResult:
+    hypotheses = analysis.get("hypotheses") or []
+    primary = max(hypotheses, key=lambda h: h.get("confidence", 0), default={})
+    root_cause = _as_text(primary.get("hypothesis"))
+    findings = [f.get("fact", "") for f in analysis.get("findings", [])]
+    steps = (analysis.get("resolution_plan") or {}).get("steps", [])
+    evidence: list[str] = []
+    locations: list[NormalizedLocation] = []
+    for item in analysis.get("evidence", []):
+        observation = _as_text(item.get("observation"))
+        if observation:
+            evidence.append(observation)
+        file = item.get("file_path")
+        start, end = item.get("start_line"), item.get("end_line")
+        if not file and isinstance(item.get("location"), str):
+            match = re.fullmatch(r"(.+):(\d+)(?:-(\d+))?", item["location"])
+            if match:
+                file, start, end = match[1], int(match[2]), int(match[3] or match[2])
+        if file:
+            locations.append(NormalizedLocation(file=file, start_line=start, end_line=end))
+    return NormalizedResult(
+        detected=bool(root_cause),
+        root_cause=root_cause,
+        explanation="\n".join(filter(None, findings)) or root_cause,
+        solution="\n".join(
+            step
+            if isinstance(step, str)
+            else str(step.get("description") or step.get("action") or step)
+            for step in steps
+        )
+        or None,
+        evidence=evidence,
         locations=locations,
     )
 
@@ -94,7 +137,13 @@ def _as_detected(value: Any) -> bool:
         return value
     if isinstance(value, str):
         return value.strip().lower() in {
-            "true", "bug", "detected", "valid", "confirmed", "triaged", "resolved"
+            "true",
+            "bug",
+            "detected",
+            "valid",
+            "confirmed",
+            "triaged",
+            "resolved",
         }
     return bool(value)
 

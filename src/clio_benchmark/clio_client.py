@@ -38,7 +38,7 @@ class ClioClient:
             "defaultBranch": revision,
             "includePaths": [],
             # Fixture inputs and private oracle data must never be indexed by Clio.
-            "excludePaths": ["cases.json", "bugs.json"],
+            "excludePaths": ["cases.json", "bugs.json", "benchmark.json", "DATASET.md"],
             "enabled": True,
         }
         return self._request("POST", f"/api/v1/projects/{project_id}/repositories", payload)

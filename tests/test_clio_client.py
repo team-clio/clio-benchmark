@@ -41,5 +41,5 @@ def test_repository_registration_excludes_fixture_and_oracle_files() -> None:
 
     client.register_repository(1, "https://github.com/team/repo.git", "abc123")
 
-    assert captured["excludePaths"] == ["cases.json", "bugs.json"]
+    assert captured["excludePaths"] == ["cases.json", "bugs.json", "benchmark.json", "DATASET.md"]
     client.close()

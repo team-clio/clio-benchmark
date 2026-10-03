@@ -86,23 +86,27 @@ class BenchmarkRunner:
                     "commit_sha": prepared.commit_sha,
                 },
             )
-            project = self._client.create_project(
-                name=f"benchmark-{manifest.run_id}-{suite_config.name}"[:120],
-                description=f"Clio Benchmark run {manifest.run_id}",
-            )
-            project_id = int(project["id"])
-            repository = self._client.register_repository(
-                project_id, str(suite_config.repository), suite_config.revision
-            )
-            synced_repository = self._client.wait_for_repository(
-                project_id,
-                int(repository["id"]),
-                timeout_seconds=self._config.runtime.startup_timeout_seconds,
-                poll_interval_seconds=self._config.runtime.poll_interval_seconds,
-            )
-            self._write_suite_metadata(manifest, prepared, project, synced_repository)
-
             for case in prepared.cases.cases:
+                project = self._client.create_project(
+                    name=f"benchmark-{manifest.run_id}-{suite_config.name}-{case.id}"[:120],
+                    description=f"Clio Benchmark run {manifest.run_id}",
+                )
+                project_id = int(project["id"])
+                repository = self._client.register_repository(
+                    project_id, str(suite_config.repository), suite_config.revision
+                )
+                synced_repository = self._client.wait_for_repository(
+                    project_id,
+                    int(repository["id"]),
+                    timeout_seconds=self._config.runtime.startup_timeout_seconds,
+                    poll_interval_seconds=self._config.runtime.poll_interval_seconds,
+                )
+                self._write_suite_metadata(manifest, prepared, project, synced_repository)
+                self._workspace.write_run_artifact(
+                    manifest.run_id,
+                    Path("cases") / suite_config.name / case.id / "metadata.json",
+                    {"project": project, "clio_repository": synced_repository},
+                )
                 result, detected, location_match, llm_evaluated, llm_failed = self._execute_case(
                     manifest, prepared, project_id, case
                 )
@@ -172,15 +176,15 @@ class BenchmarkRunner:
                 poll_interval_seconds=self._config.runtime.poll_interval_seconds,
             )
             issue_id = completed_bug.get("issue_id")
-            if issue_id is None:
-                raise ClioAnalysisError(
-                    f"Clio completed bug {completed_bug.get('id')} without an issue id"
+            analysis = (
+                self._client.wait_for_analysis(
+                    project_id,
+                    int(issue_id),
+                    timeout_seconds=self._config.runtime.case_timeout_seconds,
+                    poll_interval_seconds=self._config.runtime.poll_interval_seconds,
                 )
-            analysis = self._client.wait_for_analysis(
-                project_id,
-                int(issue_id),
-                timeout_seconds=self._config.runtime.case_timeout_seconds,
-                poll_interval_seconds=self._config.runtime.poll_interval_seconds,
+                if issue_id is not None
+                else {}
             )
 
             raw_result = {"bug": completed_bug, "analysis": analysis}
