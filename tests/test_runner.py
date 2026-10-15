@@ -229,6 +229,7 @@ def test_runner_isolates_case_projects_and_evaluates_review_outcomes(tmp_path: P
     )
     workspace = Workspace(tmp_path / ".benchmark")
     manifest = workspace.create_run(config)
+    config.runtime.max_parallel_cases = 1
     client = ReviewClient()
     summary = BenchmarkRunner(
         config, workspace, client, FakeSuiteRepository(prepared), FakeJudge()
@@ -238,3 +239,71 @@ def test_runner_isolates_case_projects_and_evaluates_review_outcomes(tmp_path: P
     assert summary.completed_cases == 2
     assert summary.detected_cases == 0
     assert summary.llm_evaluated_cases == 2
+
+
+def test_runner_bounds_parallelism_and_isolates_setup_failure(tmp_path: Path) -> None:
+    from threading import Barrier, Lock
+
+    class ParallelClient(FakeClient):
+        def __init__(self):
+            self.barrier = Barrier(2)
+            self.lock = Lock()
+            self.active = 0
+            self.peak = 0
+            self.next_id = 0
+
+        def create_project(self, name, description):
+            with self.lock:
+                self.next_id += 1
+                project_id = self.next_id
+            return {"id": project_id, "name": name}
+
+        def wait_for_repository(self, *args, **kwargs):
+            with self.lock:
+                self.active += 1
+                self.peak = max(self.peak, self.active)
+            try:
+                self.barrier.wait(timeout=10)
+                if args[0] == 1:
+                    raise ClioApiError("sync failed")
+                return {"id": 2, "syncStatus": "SYNCED"}
+            finally:
+                with self.lock:
+                    self.active -= 1
+
+    config = load_config(Path("benchmark.example.yaml"))
+    config.runtime.max_parallel_cases = 2
+    cases = [_case(f"CASE-{i}") for i in range(4)]
+    prepared = PreparedSuite(
+        config=config.suites[0], path=tmp_path, commit_sha="abc123",
+        cases=CasesFile(schemaVersion=1, cases=cases),
+        ground_truth=BugsFile(schemaVersion=1, bugs=[_truth(c.id) for c in cases]),
+    )
+    workspace = Workspace(tmp_path / ".benchmark")
+    manifest = workspace.create_run(config)
+    client = ParallelClient()
+    summary = BenchmarkRunner(
+        config, workspace, client, FakeSuiteRepository(prepared)
+    ).execute(manifest)
+    assert client.peak == 2
+    assert summary.total_cases == 4
+    assert summary.completed_cases == 3
+    assert summary.failed_cases == 1
+    run = workspace.runs / manifest.run_id
+    for case in cases:
+        assert (run / "cases" / config.suites[0].name / case.id / "metrics.json").exists()
+    metadata = json.loads((run / "suites" / config.suites[0].name / "metadata.json").read_text())
+    assert metadata["commit_sha"] == "abc123"
+    assert "project" not in metadata
+
+
+def test_parallel_case_limit_requires_positive_integer():
+    import pytest
+    from pydantic import ValidationError
+
+    from clio_benchmark.config import RuntimeConfig
+
+    assert RuntimeConfig().max_parallel_cases == 1
+    for value in (0, -1, 1.5, True):
+        with pytest.raises(ValidationError):
+            RuntimeConfig(max_parallel_cases=value)

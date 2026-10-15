@@ -26,6 +26,7 @@ class ClioConfig(StrictModel):
 
 
 class RuntimeConfig(StrictModel):
+    max_parallel_cases: int = Field(default=1, ge=1, strict=True)
     server_url: AnyHttpUrl = "http://localhost:8080"
     agent_url: AnyHttpUrl = "http://localhost:2024"
     tool_log_timeout_seconds: float = Field(default=30, gt=0)

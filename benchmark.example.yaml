@@ -9,6 +9,7 @@ clio:
     revision: main
 
 runtime:
+  max_parallel_cases: 3
   server_url: http://localhost:8080
   agent_url: http://localhost:2024
   tool_log_timeout_seconds: 30

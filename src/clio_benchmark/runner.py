@@ -1,9 +1,11 @@
-"""Single-process benchmark execution and evaluation pipeline."""
+"""Bounded concurrent benchmark execution and evaluation pipeline."""
 
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -86,35 +88,19 @@ class BenchmarkRunner:
                     "commit_sha": prepared.commit_sha,
                 },
             )
-            for case in prepared.cases.cases:
-                project = self._client.create_project(
-                    name=f"benchmark-{manifest.run_id}-{suite_config.name}-{case.id}"[:120],
-                    description=f"Clio Benchmark run {manifest.run_id}",
+            max_workers = self._config.runtime.max_parallel_cases
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Workers write only case artifacts; aggregate on the calling thread.
+                outcomes = executor.map(
+                    partial(self._prepare_and_execute_case, manifest, prepared),
+                    prepared.cases.cases,
                 )
-                project_id = int(project["id"])
-                repository = self._client.register_repository(
-                    project_id, str(suite_config.repository), suite_config.revision
-                )
-                synced_repository = self._client.wait_for_repository(
-                    project_id,
-                    int(repository["id"]),
-                    timeout_seconds=self._config.runtime.startup_timeout_seconds,
-                    poll_interval_seconds=self._config.runtime.poll_interval_seconds,
-                )
-                self._write_suite_metadata(manifest, prepared, project, synced_repository)
-                self._workspace.write_run_artifact(
-                    manifest.run_id,
-                    Path("cases") / suite_config.name / case.id / "metadata.json",
-                    {"project": project, "clio_repository": synced_repository},
-                )
-                result, detected, location_match, llm_evaluated, llm_failed = self._execute_case(
-                    manifest, prepared, project_id, case
-                )
-                results.append(result)
-                detected_cases += int(detected)
-                location_matches += int(location_match)
-                llm_evaluated_cases += int(llm_evaluated)
-                llm_failed_cases += int(llm_failed)
+                for result, detected, location_match, llm_evaluated, llm_failed in outcomes:
+                    results.append(result)
+                    detected_cases += int(detected)
+                    location_matches += int(location_match)
+                    llm_evaluated_cases += int(llm_evaluated)
+                    llm_failed_cases += int(llm_failed)
 
         completed = sum(result.status is CaseStatus.COMPLETED for result in results)
         summary = ExecutionSummary(
@@ -153,6 +139,44 @@ class BenchmarkRunner:
             render_markdown_report(manifest.run_id, summary),
         )
         return summary
+
+    def _prepare_and_execute_case(
+        self, manifest: RunManifest, prepared: PreparedSuite, case: BenchmarkCase
+    ) -> tuple[CaseExecutionResult, bool, bool, bool, bool]:
+        started = time.monotonic()
+        case_path = Path("cases") / prepared.config.name / case.id
+        self._workspace.write_run_artifact(
+            manifest.run_id, case_path / "input.json", case.model_dump(mode="json")
+        )
+        try:
+            project = self._client.create_project(
+                name=f"benchmark-{manifest.run_id}-{prepared.config.name}-{case.id}"[:120],
+                description=f"Clio Benchmark run {manifest.run_id}",
+            )
+            project_id = int(project["id"])
+            repository = self._client.register_repository(
+                project_id, str(prepared.config.repository), prepared.config.revision
+            )
+            synced_repository = self._client.wait_for_repository(
+                project_id,
+                int(repository["id"]),
+                timeout_seconds=self._config.runtime.startup_timeout_seconds,
+                poll_interval_seconds=self._config.runtime.poll_interval_seconds,
+            )
+            self._workspace.write_run_artifact(
+                manifest.run_id,
+                Path("cases") / prepared.config.name / case.id / "metadata.json",
+                {"project": project, "clio_repository": synced_repository},
+            )
+        except BenchmarkError as exc:
+            status = (
+                CaseStatus.TIMEOUT if isinstance(exc, BenchmarkTimeout) else CaseStatus.INFRA_ERROR
+            )
+            execution = self._write_failure_artifacts(
+                manifest, case_path, case.id, status, exc, started
+            )
+            return execution, False, False, False, False
+        return self._execute_case(manifest, prepared, project_id, case)
 
     def _execute_case(
         self,
@@ -337,22 +361,3 @@ class BenchmarkRunner:
             execution.model_dump(mode="json"),
         )
         return execution
-
-    def _write_suite_metadata(
-        self,
-        manifest: RunManifest,
-        suite: PreparedSuite,
-        project: dict[str, Any],
-        repository: dict[str, Any],
-    ) -> None:
-        self._workspace.write_run_artifact(
-            manifest.run_id,
-            Path("suites") / suite.config.name / "metadata.json",
-            {
-                "suite": suite.config.name,
-                "repository": str(suite.config.repository),
-                "commit_sha": suite.commit_sha,
-                "project": project,
-                "clio_repository": repository,
-            },
-        )
